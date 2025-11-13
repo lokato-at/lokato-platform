@@ -1,0 +1,38 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: lokato-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: lokato_db        
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+      TZ: Europe/Vienna
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - lokato_db_data:/var/lib/mysql
+      # All .sql/.sh files in this folder will be executed on first startup
+      - ./sql/init:/docker-entrypoint-initdb.d
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: lokato-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db          
+      PMA_USER: admin
+      PMA_PASSWORD: admin
+      PMA_ABSOLUTE_URI: http://localhost:8090/
+    ports:
+      - "8090:80"
+    depends_on:
+      - db
+
+volumes:
+  lokato_db_data:

@@ -1,0 +1,139 @@
+# Laravel (backend) + Vue/Vite (frontend) + Docker MySQL 
+
+
+# Root env (optional)
+############################
+.env
+.env.*
+!.env.example
+
+
+# OS / Editor / Sonstiges  
+############################
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux / allgemeine Backupfiles
+*~
+.nfs*
+
+# Editor & IDE
+**/.idea/
+**/.fleet/
+**/.vscode/
+**/.history/
+*.iml
+
+# Archiv-/Tempdateien
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.orig
+*.log.[0-9]*
+*.old
+~$*
+*.local
+
+
+# Node / Vite / Frontend   
+############################
+
+# Node-Module & Caches
+**/node_modules/
+**/.npm/
+**/.pnpm-store/
+**/.yarn/
+**/.cache/
+**/.vite/
+
+# Build-Output
+**/dist/
+**/build/
+
+# Env-Dateien (Vite)
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript
+**/*.tsbuildinfo
+
+# Lint/Formatter Caches
+**/.eslintcache
+**/.stylelintcache
+**/.prettier-cache
+
+# Test/Tools 
+**/coverage/
+**/.nyc_output/
+frontend/cypress/screenshots/
+frontend/cypress/videos/
+frontend/cypress/downloads/
+
+
+# PHP / Laravel (backend)  
+############################
+
+# Composer
+backend/vendor/
+backend/composer.phar
+
+# Laravel Env-Dateien
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/.env.backup
+
+# Storage & Cache 
+backend/storage/*
+!backend/storage/.gitignore
+backend/bootstrap/cache/*
+!backend/bootstrap/cache/.gitignore
+
+# Public Symlink / Hot Reload
+backend/public/storage
+backend/public/hot
+
+# PHP & Test-Caches
+backend/.phpunit.result.cache
+**/.phpunit.result.cache
+backend/.php-cs-fixer.cache
+**/.php-cs-fixer.cache
+backend/.phpstorm.meta.php
+
+# Static Analysis Caches
+backend/.phpstan.cache
+**/.phpstan.cache
+backend/.psalm/cache
+**/.psalm/cache
+
+
+# Docker                   
+############################
+
+docker/.env
+docker/*.local.yml
+docker/*-override.yml
+docker/**/.data*/
+docker/**/data/
+docker/**/tmp/
+docker/**/logs/

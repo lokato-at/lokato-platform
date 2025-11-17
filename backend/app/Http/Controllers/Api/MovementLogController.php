@@ -40,9 +40,10 @@ class MovementLogController extends Controller
             $query->where('occurred_at', '<=', $request->date('to'));
         }
 
-        $limit = min($request->integer('limit', 100), 1000);
+        $perPage = min($request->integer('per_page', 50), 200);
+        $logs = $query->paginate($perPage);
 
-        $logs = $query->limit($limit)->get()->map(function (MovementLog $log) {
+        $logs->getCollection()->transform(function (MovementLog $log) {
             return [
                 'id'           => $log->id,
                 'child'        => [

@@ -1,4 +1,4 @@
 # lokato-platform
 Frontend, Backend, Database, REST-APIs
-Tristan Volker
+Tristan
 Nikolai

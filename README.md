@@ -1,5 +1,4 @@
 # lokato-platform
 Frontend, Backend, Database, REST-APIs
-Tristan Trunez test
+Tristan
 Nikolai
-Seli was here!

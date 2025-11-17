@@ -2,3 +2,4 @@
 Frontend, Backend, Database, REST-APIs
 Tristan
 Nikolai
+Selina

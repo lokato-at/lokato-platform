@@ -15,7 +15,7 @@ class DeviceStoreRequest extends FormRequest
     {
         return [
             'name'    => ['required', 'string', 'max:100'],
-            'api_key' => ['nullable', 'string', 'size:64', 'unique:devices,api_key'],
+            'device_key' => ['required', 'string', 'max:100', 'unique:devices,device_key'],
             'room_id' => ['required', 'exists:rooms,id'],
         ];
     }

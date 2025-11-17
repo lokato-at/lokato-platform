@@ -16,13 +16,13 @@ class DeviceSeeder extends Seeder
 
         Device::create([
             'name'    => 'Tür Bastelraum links',
-            'api_key' => hash('sha256', 'device-bastelraum-links'),
+            'device_key' => 'RaspberryChild01',
             'room_id' => $bastelraum->id,
         ]);
 
         Device::create([
             'name'    => 'Tür Turnsaal rechts',
-            'api_key' => hash('sha256', 'device-turnsaal-rechts'),
+            'device_key' => 'RaspberryChild02',
             'room_id' => $turnsaal->id,
         ]);
     }

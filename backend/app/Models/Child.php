@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Child extends Model
 {
-    // Tabelle ist "children", nicht "childs"
     protected $table = 'children';
 
     public $timestamps = false; // keine created_at / updated_at Spalten

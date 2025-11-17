@@ -13,7 +13,7 @@ class Device extends Model
 
     protected $fillable = [
         'name',
-        'api_key',
+        'device_key',
         'room_id',
         'last_seen',
     ];

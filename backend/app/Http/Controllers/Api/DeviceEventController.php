@@ -18,7 +18,7 @@ class DeviceEventController extends Controller
      * POST /api/v1/scan
      *
      * Payload:
-     * - api_key
+     * - device_key
      * - tracker_uid
      * - event_time (optional)
      */
@@ -27,12 +27,12 @@ class DeviceEventController extends Controller
         $validated = $request->validated();
 
         // 1. Gerät finden
-        $device = Device::where('api_key', $validated['api_key'])->first();
+        $device = Device::where('device_key', $validated['device_key'])->first();
 
         if (!$device) {
             return response()->json([
                 'error' => 'device_not_found',
-                'message' => 'Das Gerät mit diesem API-Key ist unbekannt.',
+                'message' => 'Das Gerät mit diesem Device-Key ist unbekannt.',
             ], 404);
         }
 

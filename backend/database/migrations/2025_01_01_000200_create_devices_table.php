@@ -11,7 +11,7 @@ return new class extends Migration {
         Schema::create('devices', function (Blueprint $table) {
             $table->id();
             $table->string('name', 100);
-            $table->char('api_key', 64)->unique();
+            $table->char('device_key', 100)->unique();
             $table->unsignedBigInteger('room_id');
             $table->timestamp('last_seen')->nullable();
 

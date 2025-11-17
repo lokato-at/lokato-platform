@@ -17,12 +17,12 @@ class DeviceUpdateRequest extends FormRequest
 
         return [
             'name'    => ['sometimes', 'required', 'string', 'max:100'],
-            'api_key' => [
+            'device_key' => [
                 'sometimes',
                 'required',
                 'string',
-                'size:64',
-                'unique:devices,api_key,' . $deviceId,
+                'max:100',
+                'unique:devices,device_key,' . $deviceId,
             ],
             'room_id' => ['sometimes', 'required', 'exists:rooms,id'],
         ];

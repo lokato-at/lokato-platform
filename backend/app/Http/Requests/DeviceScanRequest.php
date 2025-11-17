@@ -15,7 +15,7 @@ class DeviceScanRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'api_key'     => ['required', 'string', 'size:64'],
+            'device_key'  => ['required', 'string', 'max:100'],
             'tracker_uid' => ['required', 'string', 'max:100'],
             'event_time'  => ['nullable', 'date'], // ISO8601 oder 'Y-m-d H:i:s'
         ];

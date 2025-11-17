@@ -22,12 +22,6 @@ class DeviceAdminController extends Controller
     {
         $data = $request->validated();
 
-        // Wenn kein api_key übergeben wird → generieren
-        if (empty($data['api_key'])) {
-            // 64 Zeichen, wie in deinem Schema
-            $data['api_key'] = Str::random(64);
-        }
-
         $device = Device::create($data);
 
         return response()->json($device, 201);

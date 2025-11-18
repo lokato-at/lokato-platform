@@ -1,59 +1,300 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 📦 Lokato Platform – Backend (Laravel)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Ein Backend-System zur **Erfassung, Anzeige und Auswertung von Kinderbewegungen** innerhalb eines Horts.
+Das Backend basiert auf **Laravel 11/12** und stellt eine vollständige REST-API bereit.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🚀 Features
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### 🔹 Hauptfunktionen
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+* **RFID-Scan Verarbeiten**
+  `/api/v1/scan` nimmt Geräte-Events entgegen und speichert Bewegungen atomar.
 
-## Learning Laravel
+* **Kinder-Standorte in Echtzeit**
+  `/api/v1/children` liefert den aktuellen Raum eines jeden Kindes.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+* **Raumbelegung + Kapazitäten**
+  `/api/v1/rooms`, `/api/v1/rooms/{id}/occupancy`
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+* **Bewegungslog (Historie)**
+  `/api/v1/movement-log` + Filter + Pagination
 
-## Laravel Sponsors
+### 🔹 Admin-Funktionen (CRUD)
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+* `/api/v1/admin/children`
+* `/api/v1/admin/rooms`
+* `/api/v1/admin/devices`
 
-### Premium Partners
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
 
-## Contributing
+### 🔹 Geräteverwaltung
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+* Jedes Gerät besitzt einen **device_key**, z.B. `raspberry_2`
+* Geräte können unabhängig vom Standort getauscht werden
+* `last_seen` zeigt an, ob Gerät aktiv ist
 
-## Code of Conduct
+### 🔹 Logging
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Eigener Log-Channel für Scanner:
 
-## Security Vulnerabilities
+```
+storage/logs/scan.log
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
+# 🔧 Requirements
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+* PHP **>= 8.2**
+* Composer
+* MySQL
+* Node.js + npm
+* OpenSSL & intl (für Laravel)
+* Optional: Redis für Cache/Queue
+
+---
+
+# 🛠 Installation (Local Development)
+
+## 1. Repository klonen
+
+```bash
+git clone https://github.com/dein-repo/lokato-platform-backend.git
+cd lokato-platform-backend
+```
+
+## 2. Abhängigkeiten installieren
+
+### PHP
+
+```bash
+composer install
+```
+
+### Node (Assets – optional)
+
+```bash
+npm install
+```
+
+## 3. `.env` anlegen
+
+```bash
+cp .env.example .env
+```
+
+## 4. App Key generieren
+
+```bash
+php artisan key:generate
+```
+
+---
+
+# 🔐 Beispiel-ENV
+
+```env
+APP_NAME=Lokato
+APP_ENV=local
+APP_KEY=
+APP_DEBUG=true
+APP_URL=http://localhost:8001
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=lokato_db
+DB_USERNAME=root
+DB_PASSWORD=
+
+FILESYSTEM_DISK=public
+LOG_CHANNEL=stack
+```
+
+---
+
+# 🗄 Datenbank vorbereiten
+
+### Migrationen
+
+```bash
+php artisan migrate
+```
+
+### Speicher für Uploads verlinken
+
+```bash
+php artisan storage:link
+```
+
+Jetzt sind Dateien unter
+`storage/app/public/...` → erreichbar über `/storage/...`
+
+---
+
+# 🧪 Feature Tests ausführen
+
+```bash
+php artisan test
+```
+
+Damit `RefreshDatabase` funktioniert, solltest du eine Test-DB haben:
+
+In `phpunit.xml`:
+
+```xml
+<env name="DB_DATABASE" value="lokato_test"/>
+```
+
+---
+
+# 📡 API-Endpoints
+
+## 📍 Scan (Scanner-Schnittstelle)
+
+### POST `/api/v1/scan`
+
+Body:
+
+```json
+{
+  "device_key": "raspberry_1",
+  "tracker_uid": "TAG-0010",
+  "event_time": "2025-11-17T14:30:00+01:00"
+}
+```
+
+Antwort:
+
+```json
+{
+  "status": "ok",
+  "movement": { ... }
+}
+```
+
+---
+
+## 🧒 Kinder-API
+
+* `GET /api/v1/children`
+* `GET /api/v1/children/{id}`
+* `GET /api/v1/children/{id}/movement-log`
+
+---
+
+## 🏠 Räume
+
+* `GET /api/v1/rooms`
+* `GET /api/v1/rooms/{id}/occupancy`
+
+---
+
+## 🔧 Admin-API (CRUD)
+
+**Geschützt via Middleware (optional):**
+
+```
+/api/v1/admin/children
+/api/v1/admin/rooms
+/api/v1/admin/devices
+```
+
+Kinder-Foto Upload:
+
+```
+multipart/form-data
+photo: file
+```
+
+---
+
+# 📥 Logging
+
+## Custom-Scanner-Log
+
+Ein eigener Channel speichert alle Scan-Events (Erfolg + Fehler):
+
+`config/logging.php`:
+
+```php
+'scan' => [
+    'driver' => 'single',
+    'path' => storage_path('logs/scan.log'),
+    'level' => 'info',
+],
+```
+
+Beispiele:
+
+```php
+Log::channel('scan')->warning('Unknown device_key', [...]);
+Log::channel('scan')->info('Scan processed', [...]);
+```
+
+---
+
+# 🚀 Deployment (Production)
+
+1. Repo pullen
+2. `.env` für Prod anpassen
+   `APP_DEBUG=false`
+3. Composer install *ohne dev*:
+
+   ```bash
+   composer install --optimize-autoloader --no-dev
+   ```
+4. Optimierungen:
+
+   ```bash
+   php artisan config:cache
+   php artisan route:cache
+   php artisan view:cache
+   ```
+5. Migrationen:
+
+   ```bash
+   php artisan migrate --force
+   ```
+6. Storage-Link (falls noch nicht vorhanden):
+
+   ```bash
+   php artisan storage:link
+   ```
+
+### Rechte
+
+PHP muss Schreibrechte auf folgende Ordner haben:
+
+```
+storage/
+bootstrap/cache/
+```
+
+
+
+---
+
+# 🧯 Troubleshooting
+
+### ❗ Geräte werden nicht erkannt
+
+* device_key stimmt nicht?
+* Gerät nicht in DB?
+* Raum nicht zugewiesen?
+
+### ❗ Kinder haben keinen Raum
+
+Prüfen:
+
+* child_locations-Eintrag vorhanden?
+* letzter Scan ist älter als aktueller?
+
+### ❗ Uploads funktionieren nicht
+
+* `php artisan storage:link`
+* Schreibrechte auf `storage/app/public`
+
+---

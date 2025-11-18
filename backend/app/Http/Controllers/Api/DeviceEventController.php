@@ -11,6 +11,7 @@ use App\Models\MovementLog;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DeviceEventController extends Controller
 {
@@ -20,11 +21,42 @@ class DeviceEventController extends Controller
 
         return DB::transaction(function () use ($validated) {
 
-            // Gerät finden (per device_key, oder api_key wenn du das noch nutzt)
-            $device = Device::where('device_key', $validated['device_key'])->firstOrFail();
+            // --- Gerät finden (per device_key) ---
+            $device = Device::where('device_key', $validated['device_key'])->first();
 
-            // Kind via tracker_uid
-            $child  = Child::where('tracker_uid', $validated['tracker_uid'])->firstOrFail();
+            if (! $device) {
+                // Logging: unbekanntes Gerät
+                Log::channel('scan')->warning('Unknown device_key on scan', [
+                    'device_key'  => $validated['device_key'],
+                    'tracker_uid' => $validated['tracker_uid'] ?? null,
+                    'ip'          => request()->ip(),
+                    'time'        => now()->toIso8601String(),
+                ]);
+
+                return response()->json([
+                    'error'   => 'device_not_found',
+                    'message' => 'Das Gerät mit diesem device_key ist unbekannt.',
+                ], 404);
+            }
+
+            // --- Kind via tracker_uid finden ---
+            $child = Child::where('tracker_uid', $validated['tracker_uid'])->first();
+
+            if (! $child) {
+                // Logging: unbekanntes Kind / Tag
+                Log::channel('scan')->warning('Unknown tracker_uid on scan', [
+                    'device_key'  => $device->device_key,
+                    'device_id'   => $device->id,
+                    'tracker_uid' => $validated['tracker_uid'],
+                    'ip'          => request()->ip(),
+                    'time'        => now()->toIso8601String(),
+                ]);
+
+                return response()->json([
+                    'error'   => 'child_not_found',
+                    'message' => 'Kein Kind mit diesem Tracker gefunden.',
+                ], 404);
+            }
 
             // Zeitpunkt bestimmen
             $occurredAt = isset($validated['event_time'])
@@ -63,6 +95,19 @@ class DeviceEventController extends Controller
             // Gerät als "gesehen" markieren
             $device->last_seen = now();
             $device->save();
+
+            // Logging: erfolgreicher Scan
+            Log::channel('scan')->info('Scan processed', [
+                'movement_id'  => $movement->id,
+                'device_key'   => $device->device_key,
+                'device_id'    => $device->id,
+                'child_id'     => $child->id,
+                'tracker_uid'  => $child->tracker_uid,
+                'from_room_id' => $fromRoomId,
+                'to_room_id'   => $toRoomId,
+                'occurred_at'  => $occurredAt->toIso8601String(),
+                'ip'           => request()->ip(),
+            ]);
 
             return response()->json([
                 'status'   => 'ok',

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Admin\Device;
 
+use App\Models\Device;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class DeviceUpdateRequest extends FormRequest
 {
@@ -13,7 +15,8 @@ class DeviceUpdateRequest extends FormRequest
 
     public function rules(): array
     {
-        $deviceId = $this->route('device');
+        $device = $this->route('device'); // Model oder ID
+        $deviceId = $device instanceof Device ? $device->id : $device;
 
         return [
             'name'    => ['sometimes', 'required', 'string', 'max:100'],
@@ -22,7 +25,7 @@ class DeviceUpdateRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                'unique:devices,device_key,' . $deviceId,
+                Rule::unique('devices', 'device_key')->ignore($deviceId, 'id'),
             ],
             'room_id' => ['sometimes', 'required', 'exists:rooms,id'],
         ];

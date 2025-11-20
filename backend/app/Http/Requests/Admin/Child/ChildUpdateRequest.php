@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Admin\Child;
 
+use App\Models\Child;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ChildUpdateRequest extends FormRequest
 {
@@ -13,7 +15,7 @@ class ChildUpdateRequest extends FormRequest
 
     public function rules(): array
     {
-        $childId = $this->route('child'); // kommt aus {child} in der Route
+        $child = $this->route('child');
 
         return [
             'name'        => ['sometimes', 'required', 'string', 'max:100'],
@@ -23,7 +25,10 @@ class ChildUpdateRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                'unique:children,tracker_uid,' . $childId,
+                Rule::unique('children', 'tracker_uid')->ignore(
+                    $child instanceof Child ? $child->id : $child,
+                    'id'
+                ),
             ],
             'is_active'   => ['sometimes', 'boolean'],
         ];

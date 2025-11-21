@@ -70,11 +70,13 @@
           v-for="m in store.latestMovements"
           :key="m.id"
         >
-          {{ m.child_name ?? m.child_id }} →
-          {{ m.to_room_name ?? m.to_room_id }}
-          ({{ m.event_time }})
+          {{ m.child?.name ?? "?" }} →
+          {{ m.to_room?.name ?? "?" }}
+          ({{ formatDate(m.occurred_at) }})
         </li>
       </ol>
+
+
 
       <p v-if="store.latestMovements.length === 0" class="muted">
         Keine Bewegungen vorhanden.
@@ -92,6 +94,21 @@ const store = useDashboardDataStore();
 onMounted(async () => {
   await store.fetchAllDashboardData();
 });
+
+const formatDate = (iso?: string) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+
+
 </script>
 
 <style scoped>

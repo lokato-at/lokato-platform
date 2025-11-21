@@ -2,11 +2,14 @@
   <div class="admin-children">
     <h1>Admin – Kinder verwalten</h1>
 
-    <div v-if="store.loading">⏳ Lade Daten…</div>
+    <!-- Ladeindikator -->
+    <div v-if="store.loading" class="info-box">⏳ Lade Daten…</div>
+
+    <!-- Fehlermeldung -->
     <div v-if="store.error" class="error-box">❌ {{ store.error }}</div>
 
     <!-- ========================================================= -->
-    <!-- CREATE CHILD FORM -->
+    <!-- NEUES KIND ERSTELLEN -->
     <!-- ========================================================= -->
     <section class="form-section">
       <h2>Neues Kind anlegen</h2>
@@ -24,7 +27,7 @@
 
         <label>
           Tracker UID:
-          <input v-model="form.tracker_uid" placeholder="optional" />
+          <input v-model="form.tracker_uid" placeholder="z.B. TAG-1234" />
         </label>
 
         <label class="inline">
@@ -32,19 +35,19 @@
           Aktiv
         </label>
 
-        <button type="submit">✔ Kind erstellen</button>
+        <button type="submit" class="primary-btn">✔ Kind erstellen</button>
       </form>
     </section>
 
     <!-- ========================================================= -->
-    <!-- CHILD LIST -->
+    <!-- KINDER-LISTE -->
     <!-- ========================================================= -->
     <section>
       <h2>Alle Kinder</h2>
 
-      <div v-if="store.children.length === 0" class="muted">
+      <p v-if="store.children.length === 0" class="muted">
         Noch keine Kinder vorhanden.
-      </div>
+      </p>
 
       <table v-else class="children-table">
         <thead>
@@ -59,12 +62,12 @@
         <tbody>
         <tr v-for="child in store.children" :key="child.id">
           <td>{{ child.name }}</td>
-          <td>{{ child.tracker_uid ?? '–' }}</td>
-          <td>{{ child.is_active ? 'Ja' : 'Nein' }}</td>
+          <td>{{ child.tracker_uid ?? "–" }}</td>
+          <td>{{ child.is_active ? "Ja" : "Nein" }}</td>
 
-          <td>
-            <button @click="selectEdit(child)">✏ Bearbeiten</button>
-            <button class="danger" @click="remove(child.id)">🗑 Löschen</button>
+          <td class="actions">
+            <button @click="selectEdit(child)" class="small-btn">✏ Bearbeiten</button>
+            <button @click="remove(child.id)" class="danger-btn small-btn">🗑 Löschen</button>
           </td>
         </tr>
         </tbody>
@@ -72,7 +75,7 @@
     </section>
 
     <!-- ========================================================= -->
-    <!-- EDIT MODAL -->
+    <!-- MODAL: KIND BEARBEITEN -->
     <!-- ========================================================= -->
     <div v-if="edit" class="modal">
       <div class="modal-box">
@@ -100,8 +103,8 @@
           </label>
 
           <div class="modal-actions">
-            <button type="submit">💾 Speichern</button>
-            <button type="button" @click="cancelEdit">Abbrechen</button>
+            <button type="submit" class="primary-btn small-btn">💾 Speichern</button>
+            <button type="button" class="small-btn" @click="cancelEdit">Abbrechen</button>
           </div>
         </form>
       </div>
@@ -110,13 +113,22 @@
 </template>
 
 <script setup lang="ts">
+/*
+|--------------------------------------------------------------------------
+| LOGIK
+|--------------------------------------------------------------------------
+| - Laden der Kinder
+| - Erstellen neuer Kinder
+| - Bearbeiten bestehender Kinder (Modal)
+| - Löschen eines Kindes
+*/
 import { reactive, ref, onMounted } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 
 const store = useAdminDataStore();
 
 /* -------------------------------------------------------
-   FORM: CREATE
+   FORMULAR: NEUES KIND
 ------------------------------------------------------- */
 const form = reactive({
   name: "",
@@ -134,7 +146,7 @@ async function create() {
       is_active: form.is_active,
     });
 
-    // Form zurücksetzen
+    // Formular resetten
     form.name = "";
     form.photo_url = "";
     form.tracker_uid = "";
@@ -145,9 +157,10 @@ async function create() {
 }
 
 /* -------------------------------------------------------
-   EDIT
+   MODAL: BEARBEITUNG
 ------------------------------------------------------- */
-const edit = ref(null as any);
+const edit = ref<number | null>(null);
+
 const editForm = reactive({
   name: "",
   photo_url: "",
@@ -155,6 +168,7 @@ const editForm = reactive({
   is_active: true,
 });
 
+// Modal öffnen → Daten des Kindes laden
 function selectEdit(child: any) {
   edit.value = child.id;
 
@@ -164,7 +178,10 @@ function selectEdit(child: any) {
   editForm.is_active = child.is_active;
 }
 
+// Kind speichern
 async function update() {
+  if (!edit.value) return;
+
   try {
     await store.updateChild(edit.value, {
       name: editForm.name,
@@ -184,7 +201,7 @@ function cancelEdit() {
 }
 
 /* -------------------------------------------------------
-   DELETE
+   LÖSCHEN
 ------------------------------------------------------- */
 async function remove(id: number) {
   if (!confirm("Wirklich löschen?")) return;
@@ -197,18 +214,35 @@ async function remove(id: number) {
 }
 
 /* -------------------------------------------------------
-   LOAD INITIAL DATA
+   INITIAL LOAD
 ------------------------------------------------------- */
 onMounted(() => store.loadChildren());
 </script>
 
 <style scoped>
+/* PAGE LAYOUT */
 .admin-children {
-  padding: 25px;
+  padding: 30px;
   max-width: 900px;
   margin: auto;
+  font-family: system-ui, sans-serif;
 }
 
+/* INFO + ERROR BOXES */
+.info-box {
+  background: #e9f3ff;
+  border-left: 4px solid #3a8bfd;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+.error-box {
+  background: #ffeaea;
+  border-left: 4px solid #ff3d3d;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+/* FORMS */
 form {
   display: flex;
   flex-direction: column;
@@ -216,36 +250,50 @@ form {
   margin-bottom: 25px;
 }
 
-input[type="text"],
-input[type="url"],
 input {
-  padding: 6px;
-  border-radius: 4px;
-  border: 1px solid #bbb;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
 }
 
-button {
-  padding: 8px 14px;
-  border: none;
-  cursor: pointer;
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* BUTTONS */
+.primary-btn {
   background: #2d7bff;
   color: white;
-  border-radius: 4px;
+  border-radius: 6px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+.small-btn {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+.danger-btn {
+  background: #ff4242 !important;
+  color: white;
 }
 
-button.danger {
-  background: #ff4242;
-}
-
+/* TABLE */
 .children-table {
   width: 100%;
   border-collapse: collapse;
+  margin-top: 10px;
 }
-
 .children-table th,
 .children-table td {
   padding: 10px;
   border-bottom: 1px solid #ddd;
+}
+.actions {
+  display: flex;
+  gap: 8px;
 }
 
 .muted {
@@ -258,17 +306,15 @@ button.danger {
   inset: 0;
   background: rgba(0,0,0,.5);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
 }
-
 .modal-box {
   background: white;
   padding: 20px;
   width: 350px;
   border-radius: 8px;
 }
-
 .modal-actions {
   display: flex;
   justify-content: space-between;

@@ -3,59 +3,92 @@
     <h1>Admin Bereich</h1>
 
     <p class="desc">
-      Verwaltung aller Daten. Wähle eine Kategorie aus, um Inhalte zu bearbeiten
-      oder neue Einträge zu erstellen.
+      Zentrale Verwaltung aller Daten. Wähle eine Kategorie, um Inhalte zu
+      bearbeiten oder neue Datensätze anzulegen.
     </p>
 
-    <!-- Loading / Error -->
-    <div v-if="store.loading" class="loading">⏳ Lade Admin-Daten…</div>
+    <!-- ========================================================= -->
+    <!-- LOAD + ERROR -->
+    <!-- ========================================================= -->
+    <div v-if="store.loading" class="info-box">⏳ Admin-Daten werden geladen…</div>
     <div v-if="store.error" class="error-box">❌ {{ store.error }}</div>
 
-    <!-- Dashboard Panels -->
+    <!-- ========================================================= -->
+    <!-- ADMIN DASHBOARD CARD GRID -->
+    <!-- ========================================================= -->
     <div class="grid">
-      <!-- Kinder -->
+
+      <!-- ---------------------------------------------------------
+           KINDER
+      --------------------------------------------------------- -->
       <div class="card">
         <h2>Kinder</h2>
-        <p>Gesamt: <strong>{{ store.children.length }}</strong></p>
-        <button @click="$router.push('/admin/children')">
-          Verwaltung öffnen
+        <p class="count">Gesamt: <strong>{{ store.children.length }}</strong></p>
+        <p class="text-small">
+          Hier kannst du Kinder anlegen, bearbeiten oder löschen.
+        </p>
+
+        <button @click="$router.push('/admin/children')" class="card-btn">
+          👶 Kinder verwalten
         </button>
       </div>
 
-      <!-- Räume -->
+      <!-- ---------------------------------------------------------
+           RÄUME
+      --------------------------------------------------------- -->
       <div class="card">
         <h2>Räume</h2>
-        <p>Gesamt: <strong>{{ store.rooms.length }}</strong></p>
-        <button @click="$router.push('/admin/rooms')">
-          Verwaltung öffnen
+        <p class="count">Gesamt: <strong>{{ store.rooms.length }}</strong></p>
+        <p class="text-small">
+          Räume, Kapazitäten und Toleranzen bearbeiten.
+        </p>
+
+        <button @click="$router.push('/admin/rooms')" class="card-btn">
+          🏫 Räume verwalten
         </button>
       </div>
 
-      <!-- Geräte -->
+      <!-- ---------------------------------------------------------
+           GERÄTE
+      --------------------------------------------------------- -->
       <div class="card">
         <h2>Geräte</h2>
-        <p>Gesamt: <strong>{{ store.devices.length }}</strong></p>
-        <button @click="$router.push('/admin/devices')">
-          Verwaltung öffnen
+        <p class="count">Gesamt: <strong>{{ store.devices.length }}</strong></p>
+        <p class="text-small">
+          Scanner-Geräte verwalten und Räumen zuordnen.
+        </p>
+
+        <button @click="$router.push('/admin/devices')" class="card-btn">
+          🔧 Geräte verwalten
         </button>
       </div>
 
-      <!-- Movements -->
-      <div class="card">
+      <!-- ---------------------------------------------------------
+           MOVEMENT SIMULATION
+      --------------------------------------------------------- -->
+      <div class="card wide">
         <h2>Bewegungen (Test)</h2>
-        <p>
-          Erstelle manuelle Bewegungsereignisse (Scan), um den
-          Bewegungsfluss zu testen.
+        <p class="text-small">
+          Simuliere Bewegungsereignisse, um das Dashboard und die Logik zu testen.
         </p>
-        <button @click="$router.push('/admin/movements')">
-          Movement Tool öffnen
+
+        <button @click="$router.push('/admin/movements')" class="card-btn">
+          🚶 Movement Tool öffnen
         </button>
       </div>
+
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+/*
+|--------------------------------------------------------------------------
+| Admin Dashboard Übersichtsseite
+|--------------------------------------------------------------------------
+| Lädt Kinder, Geräte und Räume einmalig, damit das Dashboard die
+| aktuellen Zahlen anzeigen kann.
+*/
 import { onMounted } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 
@@ -67,46 +100,106 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ==============================================================
+   BASIC LAYOUT
+============================================================== */
 .admin-home {
   padding: 30px;
   max-width: 1100px;
   margin: auto;
+  font-family: system-ui, sans-serif;
 }
 
 .desc {
   margin-bottom: 20px;
   color: #666;
+  font-size: 15px;
 }
 
+/* ==============================================================
+   INFO + ERROR
+============================================================== */
+.info-box {
+  background: #e9f3ff;
+  border-left: 4px solid #3a8bfd;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+.error-box {
+  background: #ffeaea;
+  border-left: 4px solid #ff3d3d;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+/* ==============================================================
+   GRID
+============================================================== */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 20px;
+  gap: 22px;
 }
 
+/* ==============================================================
+   ADMIN CARDS
+============================================================== */
 .card {
   background: #f8f8f8;
-  padding: 20px;
-  border-radius: 10px;
+  border-radius: 12px;
+  padding: 22px;
   border: 1px solid #ddd;
+  box-shadow: 0 0 6px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .card h2 {
   margin: 0 0 10px;
 }
 
-button {
-  margin-top: 10px;
-  padding: 8px 12px;
+/* etwas breitere Karte */
+.card.wide {
+  grid-column: span 1;
 }
 
-.error-box {
-  background: #fdd;
-  padding: 10px;
-  border-left: 4px solid red;
+@media (min-width: 700px) {
+  .card.wide {
+    grid-column: span 2;
+  }
 }
 
-.loading {
-  margin: 20px 0;
+/* ==============================================================
+   TEXT + COUNT
+============================================================== */
+.count {
+  margin: 6px 0 10px;
+  font-size: 16px;
+}
+
+.text-small {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 16px;
+}
+
+/* ==============================================================
+   BUTTONS
+============================================================== */
+.card-btn {
+  background: #2d7bff;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  transition: 0.2s;
+}
+
+.card-btn:hover {
+  background: #2264d4;
 }
 </style>

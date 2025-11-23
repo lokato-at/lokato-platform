@@ -28,6 +28,8 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     rooms: [] as any[],
     devices: [] as any[],
 
+    //Möglichst wenig strict Types um Fehler bei backend änderungen zu vermeiden
+
     // Ergebnis des Movement-Simulators (/scan)
     lastScanResult: null as any,
 
@@ -65,6 +67,8 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         this.setError("Fehler beim Laden der Admin-Kinder", err);
       }
     },
+
+    //Alle Kinder werden über Admin API geladen
 
     /* -------------------------
        Lade alle Räume

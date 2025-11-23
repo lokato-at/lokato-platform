@@ -3,7 +3,7 @@
     <!-- --------------------------------------------------------
          TITELBEREICH
          -------------------------------------------------------- -->
-    <h1>Dashboard</h1>
+    <h1>Admin Dashboard</h1>
 
     <p class="desc">
       Öffentliche Live-Übersicht aller Räume und der Kinder in jedem Raum.
@@ -157,6 +157,8 @@
 */
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useDashboardDataStore } from "@/stores/dashboardDataStore";
+
+import { useAdminDataStore } from "@/stores/adminDataStore.ts";
 
 const store = useDashboardDataStore();
 

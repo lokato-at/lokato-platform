@@ -35,6 +35,7 @@ import ChildrenAdminView from "../views/admin/ChildrenAdminView.vue";
 import RoomsAdminView from "../views/admin/RoomsAdminView.vue";
 import DevicesAdminView from "../views/admin/DevicesAdminView.vue";
 import MovementAdminView from "../views/admin/MovementAdminView.vue";
+import AdminDashboardView from "@/views/admin/AdminDashboardView.vue";
 
 /*
 |--------------------------------------------------------------------------
@@ -125,6 +126,13 @@ const routes = [
     name: "AdminMovements",
     component: MovementAdminView,
   },
+
+  {
+    path: "/admin/dashboard",
+    name: "AdminDashboardView",
+    component: AdminDashboardView,
+  },
+
 
   /* ------------------------------------------------------------------
      DEV-ROHDATEN

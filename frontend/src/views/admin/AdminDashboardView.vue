@@ -1,386 +1,429 @@
 <template>
-  <div class="dashboard-view">
-    <!-- --------------------------------------------------------
-         TITELBEREICH
-         -------------------------------------------------------- -->
-    <h1>Admin Dashboard</h1>
+  <div class="dashboard">
 
-    <p class="desc">
-      Öffentliche Live-Übersicht aller Räume und der Kinder in jedem Raum.
-      Die Daten stammen aus der öffentlichen API (GET /rooms, GET /rooms/{id}/occupancy, GET /movement-log).
-    </p>
+    <!-- HEADER -->
+    <header>
+      <h1>Admin Dashboard</h1>
+      <p class="subtitle">Live-Übersicht aller Räume & Kinder</p>
+    </header>
 
-    <!-- --------------------------------------------------------
-         SUCHFELD (NEU!)
-         -------------------------------------------------------- -->
-    <div class="search-bar">
-      <input
-        v-model="search"
-        type="text"
-        placeholder="🔍 Kind suchen…"
-      />
-      <button v-if="search" class="clear-btn" @click="search = ''">✖</button>
+    <!-- SUCHE -->
+    <div class="search-row">
+      <input v-model="search" placeholder="🔍 Kind suchen…" />
+      <input v-model="searchRoom" placeholder="🏠 Raum suchen…" />
     </div>
 
-    <!-- RAUM-SUCHE -->
-    <div class="search-bar">
-      <input
-        v-model="searchRoom"
-        type="text"
-        placeholder="🏠 Raum suchen…"
-      />
-      <button v-if="searchRoom" class="clear-btn" @click="searchRoom = ''">✖</button>
-    </div>
-
-    <!-- Ladeindikator -->
-    <div v-if="store.loading">⏳ Lade Daten…</div>
-
-    <!-- Fehleranzeige -->
-    <div v-if="store.error" class="error-box">
-      ❌ {{ store.error }}
-    </div>
+    <!-- STATUS -->
+    <p v-if="store.loading" class="loading">⏳ Lade…</p>
+    <p v-if="store.error" class="error">{{ store.error }}</p>
 
     <!-- ========================================================= -->
-    <!-- 1) RÄUME MIT BELEGUNG                                     -->
+    <!-- RÄUME -->
     <!-- ========================================================= -->
     <section>
       <h2>Räume</h2>
 
-      <!-- Grid Layout für Raumkarten -->
-      <div class="rooms-grid">
-        <!-- Jede Karte stellt einen Raum dar -->
-        <article
-          class="room-card"
-          v-for="room in filteredRooms"
-          :key="room.id"
-        >
-          <!-- Raumname -->
-          <h3>{{ room.name }}</h3>
+      <div class="rooms">
+        <div v-for="room in filteredRooms" :key="room.id" class="room">
 
-          <!-- aktuelle Anzahl Kinder im Raum -->
-          <p class="room-capacity">
-            Kapazität:
-            <strong>{{ room.current_count }} / {{ room.capacity }}</strong>
+          <!-- Raumkopf -->
+          <div class="room-header">
+            <h3>{{ room.name }}</h3>
+            <button class="btn small" @click="openRoomEdit(room)">✏ Edit Room</button>
+          </div>
+
+          <!-- Raumkapazität -->
+          <p class="capacity">{{ room.current_count }} / {{ room.capacity }}</p>
+
+          <!-- Raumstatus -->
+          <p
+            class="status"
+            :class="{
+              red: room.status.over_capacity,
+              yellow: room.status.within_tolerance && !room.status.over_capacity,
+              green: !room.status.within_tolerance && !room.status.over_capacity
+            }"
+          >
+            {{
+              room.status.over_capacity
+                ? "Überfüllt"
+                : room.status.within_tolerance ? "Toleranzbereich" : "OK"
+            }}
           </p>
 
-          <!-- Raumstatus: Überfüllt / Toleranzbereich / OK -->
-          <p class="room-status">
-            Status:
-            <strong
-              :class="{
-                red: room.status.over_capacity,
-                yellow: !room.status.over_capacity && room.status.within_tolerance,
-                green: !room.status.over_capacity && !room.status.within_tolerance,
-              }"
-            >
-              {{
-                room.status.over_capacity
-                  ? "Überfüllt"
-                  : room.status.within_tolerance
-                    ? "Toleranzbereich"
-                    : "OK"
-              }}
-            </strong>
-          </p>
-
-          <!-- ================================
-               KINDELISTE (mit Suchfilter)
-               ================================ -->
           <h4>Kinder</h4>
 
-          <!-- Wenn gefilterte Kinder existieren -->
-          <ul
-            v-if="filteredOccupancy[room.id]?.children.length"
-            class="child-list"
-          >
+          <!-- KINDERLISTE -->
+          <ul class="children">
+
             <li
-              v-for="child in filteredOccupancy[room.id].children"
-              :key="child.id"
-              class="child-entry"
+              v-for="child in filteredOccupancy[String(room.id)]?.children || []"
+              :key="child.child_id || child.id"
+              class="child"
             >
-              <!-- Foto oder Platzhalter -->
               <img
-                v-if="child.photo_url"
-                :src="child.photo_url"
-                alt="Foto"
+                :src="child.photo_url || 'https://via.placeholder.com/40?text=?'"
                 class="child-photo"
               />
 
-              <img
-                v-else
-                src="https://via.placeholder.com/40?text=?"
-                alt="? "
-                class="child-photo"
-              />
+              <span class="child-name">{{ child.name }}</span>
 
-              <!-- Name -->
-              <span>{{ child.name }}</span>
+              <!-- Edit -->
+              <button class="btn-xs" @click="openChildEdit(child)">✏</button>
+
+              <!-- Move -->
+              <button class="btn-xs" @click="openChildMove(child)">↦</button>
+
+              <!-- TODO: Kinder Movement hat noch Fehler (Findet keine Tracker UID)
+
+                    TODO: Findet generell zu wenige Daten also die Seite an sich ist noch in Testphase
+               -->
+
+            </li>
+
+            <li
+              v-if="!(filteredOccupancy[String(room.id)]?.children || []).length"
+              class="muted"
+            >
+              Keine Kinder in diesem Raum.
             </li>
           </ul>
-
-          <!-- Kein Treffer für Raum -->
-          <p v-else class="muted">Keine Treffer für diesen Raum.</p>
-        </article>
+        </div>
       </div>
     </section>
 
     <!-- ========================================================= -->
-    <!-- 2) LETZTE BEWEGUNGEN AUS DEM MOVEMENT LOG                -->
+    <!-- LETZTE BEWEGUNGEN -->
     <!-- ========================================================= -->
-    <section class="movements-section">
+    <section>
       <h2>Letzte Bewegungen</h2>
 
-      <ol class="movement-list">
-        <li
-          v-for="m in store.latestMovements"
-          :key="m.id"
-        >
+      <ul class="movements">
+        <li v-for="m in store.latestMovements" :key="m.id">
           <strong>{{ m.child?.name ?? "?" }}</strong>
-          <span class="arrow">→</span>
+          →
           <strong>{{ m.to_room?.name ?? "?" }}</strong>
-          <span class="movement-time">({{ formatDate(m.occurred_at) }})</span>
+          <span class="time">({{ formatDate(m.occurred_at) }})</span>
         </li>
-      </ol>
 
-      <p v-if="store.latestMovements.length === 0" class="muted">
-        Keine Bewegungen vorhanden.
-      </p>
+        <li v-if="store.latestMovements.length === 0" class="muted">
+          Keine Bewegungen vorhanden.
+        </li>
+      </ul>
     </section>
+
+    <!-- ========================================================= -->
+    <!-- MODAL: ROOM EDIT -->
+    <!-- ========================================================= -->
+    <div v-if="editingRoom !== null" class="modal">
+      <div class="modal-box">
+        <h3>Raum bearbeiten</h3>
+
+        <label>Name<input v-model="roomForm.name" /></label>
+        <label>Bereich<input v-model="roomForm.area" /></label>
+        <label>Kapazität<input type="number" v-model.number="roomForm.capacity" /></label>
+        <label>Toleranz<input type="number" v-model.number="roomForm.tolerance" /></label>
+
+        <label><input type="checkbox" v-model="roomForm.is_active" /> Aktiv</label>
+
+        <div class="modal-actions">
+          <button class="btn primary" @click="saveRoomEdit">Speichern</button>
+          <button class="btn" @click="editingRoom = null">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL: CHILD EDIT -->
+    <!-- ========================================================= -->
+    <div v-if="editingChild !== null" class="modal">
+      <div class="modal-box">
+        <h3>Kind bearbeiten</h3>
+
+        <label>Name<input v-model="childForm.name" /></label>
+        <label>Foto URL<input v-model="childForm.photo_url" /></label>
+        <label>Tracker UID<input v-model="childForm.tracker_uid" /></label>
+        <label><input type="checkbox" v-model="childForm.is_active" /> Aktiv</label>
+
+        <div class="modal-actions">
+          <button class="btn primary" @click="saveChildEdit">Speichern</button>
+          <button class="btn" @click="editingChild = null">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL: CHILD MOVE (SCAN SIMULATOR) -->
+    <!-- ========================================================= -->
+    <div v-if="movingChild !== null" class="modal">
+      <div class="modal-box">
+        <h3>Movement erstellen</h3>
+
+        <p><strong>{{ movingChild?.name }}</strong> bewegen</p>
+
+        <label>
+          Gerät auswählen
+          <select v-model="moveDeviceKey">
+            <option
+              v-for="d in admin.devices"
+              :key="d.id"
+              :value="d.device_key"
+            >
+              {{ d.name }} (Room #{{ d.room_id }})
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Zeitpunkt (optional)
+          <input type="datetime-local" v-model="moveEventTime" />
+        </label>
+
+        <div class="modal-actions">
+          <button class="btn primary" @click="performMove">Bewegen</button>
+          <button class="btn" @click="movingChild = null">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
-/*
-|--------------------------------------------------------------------------
-| IMPORTS
-|--------------------------------------------------------------------------
-*/
-import { ref, computed, onMounted, onUnmounted } from "vue";
+/* Imports */
+import {
+  ref,
+  reactive,
+  computed,
+  onMounted,
+  onUnmounted
+} from "vue";
+
 import { useDashboardDataStore } from "@/stores/dashboardDataStore";
+import { useAdminDataStore } from "@/stores/adminDataStore";
 
-import { useAdminDataStore } from "@/stores/adminDataStore.ts";
-
+/* Stores */
 const store = useDashboardDataStore();
+const admin = useAdminDataStore();
 
-/*
-|--------------------------------------------------------------------------
-| AUTO REFRESH SETUP
-|--------------------------------------------------------------------------
-| - Beim Mounten wird einmal initial geladen.
-| - Danach läuft ein Interval, das periodisch die Daten neu holt.
-| - Beim Unmount wird das Interval wieder entfernt.
-| - Intervalldauer ist aktuell 30s (30000 ms). Du kannst das leicht anpassen.
-*/
+/* Auto-refresh */
 let refreshInterval: number | null = null;
-const AUTO_REFRESH_MS = 30000; // 30 Sekunden
 
 onMounted(async () => {
-  // initial load
   await store.fetchAllDashboardData();
+  admin.loadDevices();
 
-  // auto-refresh starten
-  refreshInterval = window.setInterval(async () => {
-    // Best-effort Aktualisierung: Fehler werden intern im Store behandelt.
-    try {
-      // optional: du kannst hier auch nur einzelne Endpoints refreshen,
-      // z.B. store.fetchLatestMovements(), um Last zu sparen.
-      await store.fetchAllDashboardData();
-      // Debug/Log — kannst du auskommentieren
-      // console.log("⟳ Dashboard auto-refreshed");
-    } catch (e) {
-      // nichts weiter tun — store zeigt Fehler an
-      console.warn("Auto-refresh failed", e);
-    }
-  }, AUTO_REFRESH_MS);
+  refreshInterval = window.setInterval(() => {
+    store.fetchAllDashboardData();
+  }, 30000);
 });
 
 onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
-  }
+  if (refreshInterval) clearInterval(refreshInterval);
 });
 
-/*
-|--------------------------------------------------------------------------
-| SUCHFELD (reactiver Textinput)
-|--------------------------------------------------------------------------
-*/
+/* Suche */
 const search = ref("");
 const searchRoom = ref("");
 
-
-/*
-|--------------------------------------------------------------------------
-| GEFILTERTE OCCUPANCY (Kinder werden nach Suche gefiltert)
-|--------------------------------------------------------------------------
-| - Räume bleiben sichtbar
-| - Kinderliste pro Raum wird nach dem Suchbegriff gefiltert
-| - Gesucht wird in:
-|     * Name
-|     * tracker_uid (falls vorhanden)
-*/
+/* Kinder pro Raum filtern */
 const filteredOccupancy = computed(() => {
-  // Guard: falls occupancy noch nicht geladen ist, gib leeres Objekt zurück
-  const occ = store.occupancy || {};
-
-  if (!search.value) return occ;
+  if (!search.value) return store.occupancy || {};
 
   const q = search.value.toLowerCase();
-  const result: Record<number, any> = {};
+  const result: Record<string, any> = {};
 
-  for (const [roomId, data] of Object.entries(occ)) {
-    const children = data.children || [];
-
-    const filtered = children.filter((c: any) =>
-      (c.name ?? "").toLowerCase().includes(q) ||
-      ((c.tracker_uid ?? "").toLowerCase().includes(q))
+  for (const [roomId, data] of Object.entries(store.occupancy || {})) {
+    const filtered = (data.children || []).filter((c: any) =>
+      c.name?.toLowerCase().includes(q) ||
+      c.tracker_uid?.toLowerCase().includes(q)
     );
 
-    result[Number(roomId)] = {
-      ...data,
-      children: filtered
-    };
+    result[String(roomId)] = { ...data, children: filtered };
   }
 
   return result;
 });
 
-/*
-|--------------------------------------------------------------------------
-| GEFILTERTE RÄUME
-|--------------------------------------------------------------------------
-| Räume werden ausgeblendet, wenn der Name NICHT zum Suchbegriff passt.
-| Wenn store.rooms noch null ist, geben wir ein leeres Array zurück.
-*/
+/* Räume filtern */
 const filteredRooms = computed(() => {
-  const rooms = store.rooms || [];
-
-  if (!searchRoom.value) return rooms;
-
+  if (!searchRoom.value) return store.rooms || [];
   const q = searchRoom.value.toLowerCase();
-  return rooms.filter((r: any) =>
-    (r.name ?? "").toLowerCase().includes(q)
-  );
+  return store.rooms.filter((r) => r.name.toLowerCase().includes(q));
 });
 
-/*
-|--------------------------------------------------------------------------
-| DATUM FORMATIEREN → Deutsch
-|--------------------------------------------------------------------------
-*/
-const formatDate = (iso?: string) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+/* Datum formatieren */
+const formatDate = (iso?: string) =>
+  iso
+    ? new Date(iso).toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+    : "";
+
+/* ========================================================= */
+/* ROOM EDIT */
+/* ========================================================= */
+const editingRoom = ref<number | null>(null);
+
+const roomForm = reactive({
+  name: "",
+  area: "",
+  capacity: 0,
+  tolerance: 0,
+  is_active: true
+});
+
+function openRoomEdit(room: any) {
+  editingRoom.value = Number(room.id);
+  roomForm.name = room.name;
+  roomForm.area = room.area;
+  roomForm.capacity = room.capacity;
+  roomForm.tolerance = room.tolerance;
+  roomForm.is_active = room.is_active;
+}
+
+async function saveRoomEdit() {
+  await admin.updateRoom(editingRoom.value!, { ...roomForm });
+  editingRoom.value = null;
+  await store.fetchAllDashboardData();
+}
+
+/* ========================================================= */
+/* CHILD EDIT */
+/* ========================================================= */
+const editingChild = ref<number | null>(null);
+
+const childForm = reactive({
+  name: "",
+  photo_url: "",
+  tracker_uid: "",
+  is_active: true
+});
+
+function openChildEdit(child: any) {
+  editingChild.value = Number(child.id ?? child.child_id);
+
+  childForm.name = child.name ?? "";
+  childForm.photo_url = child.photo_url ?? "";
+  childForm.tracker_uid = child.tracker_uid ?? "";
+  childForm.is_active = child.is_active ?? true;
+}
+
+async function saveChildEdit() {
+  await admin.updateChild(editingChild.value!, { ...childForm });
+  editingChild.value = null;
+  await store.fetchAllDashboardData();
+}
+
+/* ========================================================= */
+/* CHILD MOVE (SCAN SIMULATION) */
+/* ========================================================= */
+const movingChild = ref<any>(null);
+const moveDeviceKey = ref<string>("");
+const moveEventTime = ref<string>("");
+
+function openChildMove(child: any) {
+  movingChild.value = child;
+
+  if (!admin.devices.length) {
+    admin.loadDevices();
+  }
+}
+
+async function performMove() {
+  if (!movingChild.value) return;
+
+  const child = movingChild.value;
+
+  /* Universal Tracker-Resolver */
+  const tracker =
+    child.tracker_uid ??
+    admin.children.find((c) => c.id == child.id)?.tracker_uid ??
+    admin.children.find((c) => c.id == child.child_id)?.tracker_uid ??
+    null;
+
+  if (!tracker) {
+    alert("Dieses Kind hat keinen tracker_uid!");
+    return;
+  }
+
+  if (!moveDeviceKey.value) {
+    alert("Bitte ein Gerät auswählen!");
+    return;
+  }
+
+  await admin.sendScanEvent({
+    device_key: moveDeviceKey.value,
+    tracker_uid: tracker,
+    event_time: moveEventTime.value || undefined
   });
-};
+
+  movingChild.value = null;
+
+  /* Reload Dashboard */
+  await store.fetchAllDashboardData();
+}
 </script>
 
 <style scoped>
-/* ===== Gesamt-Layout ===== */
-.dashboard-view {
-  padding: 30px;
+.dashboard {
   max-width: 1100px;
   margin: auto;
+  padding: 32px;
   font-family: system-ui, sans-serif;
 }
 
-h1 {
-  margin-bottom: 10px;
-}
-
-.desc {
-  color: #666;
+.subtitle {
+  color: #777;
   margin-bottom: 20px;
 }
 
-/* =========================================================
-   SUCHFELD
-   ========================================================= */
-.search-bar {
+.search-row {
   display: flex;
-  justify-content: center;
-  margin: 20px 0 30px 0;
-  position: relative;
-  width: 100%;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
-.search-bar input {
-  width: 100%;
-  max-width: 500px;
-  padding: 10px 14px;
-  border-radius: 12px;
+.search-row input {
+  flex: 1;
+  padding: 10px;
   border: 1px solid #ccc;
-  font-size: 15px;
-  padding-right: 40px;
+  border-radius: 8px;
 }
 
-.search-bar input:focus {
-  outline: none;
-  border-color: #2d7bff;
-  box-shadow: 0 0 4px rgba(45, 123, 255, 0.4);
-}
-
-/* Achtung: clear-btn ist absolut positioniert; bei zwei Suchleisten ist es OK,
-   könnte aber bei sehr kleinen Screens leicht überlappen */
-.clear-btn {
-  position: absolute;
-  right: calc(50% - 230px);
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 16px;
-  color: #777;
-}
-
-.clear-btn:hover {
-  color: black;
-}
-
-/* =========================================================
-   Räume
-   ========================================================= */
-.rooms-grid {
+.rooms {
   display: grid;
-  gap: 22px;
+  gap: 20px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
-.room-card {
+.room {
   padding: 18px;
   background: white;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid #ddd;
-  box-shadow: 0 3px 7px rgba(0,0,0,0.05);
-  transition: transform 0.1s ease;
 }
 
-.room-card:hover {
-  transform: translateY(-3px);
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.room-status strong.green { color: #009900; }
-.room-status strong.yellow { color: #cc8800; }
-.room-status strong.red   { color: #cc0000; }
+.status.green { color: #009900; }
+.status.yellow { color: #d29c00; }
+.status.red { color: #d60000; }
 
-/* =========================================================
-   Kinderliste
-   ========================================================= */
-.child-list {
+.children {
   list-style: none;
   padding: 0;
-  margin-top: 10px;
 }
 
-.child-entry {
+.child {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -388,30 +431,83 @@ h1 {
 }
 
 .child-photo {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
   object-fit: cover;
-  border: 1px solid #ccc;
 }
 
-.muted { color: #777; }
+.child-name {
+  flex: 1;
+}
 
-/* =========================================================
-   Bewegungen
-   ========================================================= */
-.movements-section { margin-top: 40px; }
-.movement-list { padding-left: 20px; }
-.arrow { margin: 0 6px; }
-.movement-time { color: #777; }
+.btn-xs {
+  padding: 4px 8px;
+  background: #ececec;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  font-size: 12px;
+}
 
-/* =========================================================
-   Fehler
-   ========================================================= */
-.error-box {
-  background: #fdd;
-  padding: 10px;
-  border-left: 4px solid red;
-  margin-bottom: 15px;
+.btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #eee;
+  border: none;
+}
+
+.btn.primary {
+  background: #2d7bff !important;
+  color: white;
+}
+
+.btn.small {
+  padding: 6px 10px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-box {
+  width: 350px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+}
+
+.modal-box input,
+.modal-box select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.muted {
+  color: #777;
+}
+
+.error {
+  color: red;
+}
+
+.loading {
+  color: #555;
 }
 </style>

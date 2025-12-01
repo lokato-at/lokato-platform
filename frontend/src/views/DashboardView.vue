@@ -79,12 +79,28 @@
 
           <h4>Kinder</h4>
 
+          <!-- 🔥 SORTIERUNG TOGGLE -->
+          <div class="sort-toggle">
+            <button
+              @click="sortOrderByRoom[room.id] =
+                sortOrderByRoom[room.id] === 'asc' ? 'desc' : 'asc'"
+            >
+              Sortierung:
+              {{ sortOrderByRoom[room.id] === 'asc'
+              ? "Erster oben"
+              : "Letzter oben"
+              }}
+            </button>
+          </div>
+
           <ul
             v-if="filteredOccupancy[room.id]?.children.length"
             class="child-list"
           >
+
+            <!-- 🔥 KINDERLISTE SORTIERT -->
             <li
-              v-for="child in filteredOccupancy[room.id].children"
+              v-for="child in sortChildrenForRoom(room.id, filteredOccupancy[room.id].children)"
               :key="child.child_id"
               class="child-entry"
             >
@@ -102,15 +118,10 @@
                 class="child-photo"
               />
 
-              <!-- --------------------------------------------------------
-                   KINDERNAME + LIVE-AUFENTHALTSZEIT (jede Sekunde)
-                   --------------------------------------------------------
-
-                   timeInRoomByChild[...] liefert den formatierten Zeitwert
-                   getDurationColor(...) liefert die Farbe abhängig von der Dauer
-              -->
               <span>
-                {{ child.name }} <em style="font-size: small;  opacity:0.6;">im Raum seit</em>
+                {{ child.name }}
+                <em style="font-size: small; opacity:0.6;">im Raum seit</em>
+
                 <small
                   class="time-diff"
                   :class="getDurationColor(child.child_id)"
@@ -183,22 +194,15 @@ const search = ref("");
 const searchRoom = ref("");
 
 /* ==========================================================
-   🔥 LIVE-ZEITUPDATER (JEDEN 1 SEKUNDE)
-   ----------------------------------------------------------
-   "now" aktualisiert sich jede Sekunde.
-
-   Dadurch wird *nur* der computed timeInRoomByChild
-   jede Sekunde neu berechnet → die Aufenthaltszeit läuft live
-   ohne die API neu aufzurufen.
+   LIVE-ZEITUPDATER (jede Sekunde)
    ========================================================== */
 const now = ref(Date.now());
-
 setInterval(() => {
   now.value = Date.now();
 }, 1000);
 
 /* ==========================================================
-   🔥 ZEIT PRO KIND (HH:MM:SS) – computed abhängig von "now"
+   ZEIT PRO KIND (HH:MM:SS)
    ========================================================== */
 const timeInRoomByChild = computed(() => {
   const result: Record<number, string> = {};
@@ -206,18 +210,15 @@ const timeInRoomByChild = computed(() => {
 
   if (!movements || !Array.isArray(movements)) return result;
 
-  const current = now.value; // ⬅ live aktualisiert
+  const current = now.value;
 
-  // Für jedes Kind nur die letzte Bewegung speichern
   const byChild = new Map<number, any>();
 
   movements.forEach((m: any) => {
-    const childId = Number(m.child?.id); // movement liefert "id"
+    const childId = Number(m.child?.id);
     if (!childId || !m.occurred_at) return;
 
-    if (!byChild.has(childId)) {
-      byChild.set(childId, m);
-    }
+    if (!byChild.has(childId)) byChild.set(childId, m);
   });
 
   byChild.forEach((m, childId) => {
@@ -240,11 +241,7 @@ const timeInRoomByChild = computed(() => {
 });
 
 /* ==========================================================
-   🔥 FARBKLASSEN FÜR ZEIT NACH DAUER
-   ----------------------------------------------------------
-   < 10 Minuten  → grün
-   < 30 Minuten  → gelb
-   ≥ 30 Minuten  → rot
+   FARBKLASSEN
    ========================================================== */
 function getDurationColor(childId: number) {
   const txt = timeInRoomByChild.value?.[childId];
@@ -256,6 +253,27 @@ function getDurationColor(childId: number) {
   if (totalMin < 10) return "green-time";
   if (totalMin < 30) return "yellow-time";
   return "red-time";
+}
+
+/* ==========================================================
+   🔥 SORTIERUNG NACH EINTRITTSZEIT (pro Raum)
+   ========================================================== */
+const sortOrderByRoom = ref<Record<number, "asc" | "desc">>({});
+
+function sortChildrenForRoom(roomId: number, children: any[]) {
+  const order = sortOrderByRoom.value[roomId] || "desc"; // FIXED: roomId
+
+  function getEntryTimestamp(child: any) {
+    const move = store.latestMovements.find(m => m.child?.id === child.child_id);
+    return move ? new Date(move.occurred_at).getTime() : 0;
+  }
+
+  return [...children].sort((a, b) => {
+    const tA = getEntryTimestamp(a);
+    const tB = getEntryTimestamp(b);
+
+    return order === "asc" ? tA - tB : tB - tA;
+  });
 }
 
 /* ==========================================================
@@ -292,11 +310,13 @@ const filteredRooms = computed(() => {
   if (!searchRoom.value) return rooms;
 
   const q = searchRoom.value.toLowerCase();
-  return rooms.filter((r: any) => (r.name ?? "").toLowerCase().includes(q));
+  return rooms.filter((r: any) =>
+    (r.name ?? "").toLowerCase().includes(q)
+  );
 });
 
 /* ==========================================================
-   DATUMFORMAT
+   DATUM FORMATIEREN
    ========================================================== */
 const formatDate = (iso?: string) => {
   if (!iso) return "";
@@ -312,97 +332,220 @@ const formatDate = (iso?: string) => {
 
 <style scoped>
 /* ==========================================================
-   LAYOUT UND STYLE (unverändert)
+   GLOBALER LOOK
    ========================================================== */
-
 .dashboard-view {
-  padding: 30px;
-  max-width: 1100px;
+  padding: 32px;
+  max-width: 1150px;
   margin: auto;
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-h1 { margin-bottom: 10px; }
-.desc { color: #666; margin-bottom: 20px; }
+h1 {
+  margin-bottom: 6px;
+  font-size: 2rem;
+  font-weight: 700;
+}
 
+.desc {
+  color: #666;
+  margin-bottom: 24px;
+  font-size: 0.95rem;
+}
+
+/* ==========================================================
+   SUCHLEISTEN
+   ========================================================== */
 .search-bar {
   display: flex;
   justify-content: center;
-  margin: 20px 0 30px 0;
+  margin: 16px 0 26px 0;
   position: relative;
 }
 
 .search-bar input {
   width: 100%;
-  max-width: 500px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid #ccc;
-  font-size: 15px;
-  padding-right: 40px;
-}
-
-.rooms-grid {
-  display: grid;
-  gap: 22px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-
-.room-card {
-  padding: 18px;
-  background: white;
-  border-radius: 10px;
+  max-width: 520px;
+  padding: 11px 16px;
+  border-radius: 14px;
   border: 1px solid #ddd;
-  box-shadow: 0 3px 7px rgba(0,0,0,0.05);
+  background: #fafafa;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+}
+
+.clear-btn {
+  position: absolute;
+  right: calc(50% - 260px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #888;
+}
+
+.clear-btn:hover {
+  color: #333;
 }
 
 /* ==========================================================
-   🔥 ZEIT-FARBKLASSEN
+   RAUMKARTEN GRID
    ========================================================== */
-.time-diff {
-  margin-left: 8px;
+.rooms-grid {
+  display: grid;
+  gap: 26px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+/* ==========================================================
+   EINZELNE RAUMKARTE
+   ========================================================== */
+.room-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  padding: 22px;
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.03),
+    0 8px 20px rgba(0,0,0,0.04);
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.room-card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 4px 12px rgba(0,0,0,0.06),
+    0 12px 28px rgba(0,0,0,0.05);
+}
+
+.room-card h3 {
+  margin-bottom: 6px;
+  font-size: 1.2rem;
+}
+
+.room-capacity strong {
+  font-weight: 600;
+}
+
+.room-status strong.green { color: #16a34a; }
+.room-status strong.yellow { color: #ca8a04; }
+.room-status strong.red   { color: #dc2626; }
+
+/* ==========================================================
+   SORTIER-BUTTON
+   ========================================================== */
+.sort-toggle {
+  margin: 8px 0 14px 0;
+}
+
+.sort-toggle button {
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  padding: 6px 12px;
   font-size: 12px;
-  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0.9;
+  transition: all 0.15s ease;
 }
 
-.green-time {
-  color: #009900;
+.sort-toggle button:hover {
+  background: #e5e7eb;
+  opacity: 1;
 }
 
-.yellow-time {
-  color: #cc8800;
+/* ==========================================================
+   KINDER LISTE
+   ========================================================== */
+.child-list {
+  list-style: none;
+  padding-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-
-.red-time {
-  color: #cc0000;
-}
-
-/* ========================================================== */
 
 .child-entry {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f1f1;
+}
+
+.child-entry:last-child {
+  border-bottom: none;
 }
 
 .child-photo {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   object-fit: cover;
-  border: 1px solid #ccc;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
 }
 
-.muted { color: #777; }
+/* Zeit-Anzeige */
+.time-diff {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
 
-.movements-section { margin-top: 40px; }
-.movement-time { color: #777; }
+/* Farbcode der Zeit */
+.green-time  { color: #16a34a; }
+.yellow-time { color: #ca8a04; }
+.red-time    { color: #dc2626; }
 
+em {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+/* ==========================================================
+   MOVEMENT LOG
+   ========================================================== */
+.movements-section {
+  margin-top: 46px;
+}
+
+.movement-list {
+  padding-left: 20px;
+}
+
+.arrow {
+  margin: 0 8px;
+}
+
+.movement-time {
+  color: #6b7280;
+}
+
+/* ==========================================================
+   FEHLERBOX
+   ========================================================== */
 .error-box {
-  background: #fdd;
-  padding: 10px;
-  border-left: 4px solid red;
-  margin-bottom: 15px;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 12px;
+  border-left: 4px solid #dc2626;
+  border-radius: 6px;
+  margin-bottom: 18px;
 }
+
+.muted {
+  color: #777;
+}
+
 </style>

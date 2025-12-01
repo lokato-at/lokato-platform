@@ -7,6 +7,13 @@
       <p class="subtitle">Live-Übersicht aller Räume & Kinder</p>
     </header>
 
+    <!-- MORE SETTINGS / ADMIN HOME -->
+    <div class="settings-bar">
+      <router-link to="/admin/home" class="btn settings-btn">
+        ⚙ More Settings
+      </router-link>
+    </div>
+
     <!-- SUCHE -->
     <div class="search-row">
       <input v-model="search" placeholder="🔍 Kind suchen…" />
@@ -38,10 +45,8 @@
             <button class="btn small" @click="openRoomEdit(room)">✏ Edit Room</button>
           </div>
 
-          <!-- Raumkapazität -->
           <p class="capacity">{{ room.current_count }} / {{ room.capacity }}</p>
 
-          <!-- Raumstatus -->
           <p
             class="status"
             :class="{
@@ -57,13 +62,26 @@
             }}
           </p>
 
+          <!-- SORTIERUNG -->
+          <div class="sort-toggle">
+            <button
+              @click="sortOrderByRoom[room.id] =
+                sortOrderByRoom[room.id] === 'asc' ? 'desc' : 'asc'"
+            >
+              Sortierung:
+              {{ sortOrderByRoom[room.id] === 'asc'
+              ? "Erster oben"
+              : "Letzter oben"
+              }}
+            </button>
+          </div>
+
           <h4>Kinder</h4>
 
-          <!-- KINDERLISTE -->
           <ul class="children">
 
             <li
-              v-for="child in filteredOccupancy[String(room.id)]?.children || []"
+              v-for="child in sortChildrenForRoom(room.id, filteredOccupancy[String(room.id)]?.children || [])"
               :key="child.child_id || child.id"
               class="child"
               draggable="true"
@@ -74,13 +92,33 @@
                 class="child-photo"
               />
 
-              <span class="child-name">{{ child.name }}</span>
+              <!-- INLINE ZEIT -->
+              <span class="child-name">
+                {{ child.name }}
+                <em style="opacity:0.6; font-size:11px;">im Raum seit</em>
+                <small
+                  class="time-diff"
+                  :class="getDurationColor(child.child_id)"
+                >
+                  {{ timeInRoomByChild[child.child_id] || "" }}
+                </small>
+              </span>
 
-              <!-- 🔧 Edit -->
-              <button class="btn-xs" @click="openChildEdit(child)">✏</button>
-
-              <!-- 🔧 Popup-Move -->
-              <button class="btn-xs" @click="openChildMove(child)">↦</button>
+              <!-- hübschere Icons -->
+              <button
+                class="btn-xs btn-edit"
+                @click="openChildEdit(child)"
+                title="Kind bearbeiten"
+              >
+                ✏️
+              </button>
+              <button
+                class="btn-xs btn-move"
+                @click="openChildMove(child)"
+                title="Movement erstellen"
+              >
+                🚶‍♂️
+              </button>
             </li>
 
             <li
@@ -89,6 +127,7 @@
             >
               Keine Kinder in diesem Raum.
             </li>
+
           </ul>
         </div>
       </div>
@@ -115,8 +154,10 @@
     </section>
 
     <!-- ========================================================= -->
-    <!-- MODAL: ROOM EDIT -->
+    <!-- MODALS -->
     <!-- ========================================================= -->
+
+    <!-- ROOM EDIT -->
     <div v-if="editingRoom !== null" class="modal">
       <div class="modal-box">
         <h3>Raum bearbeiten</h3>
@@ -134,9 +175,7 @@
       </div>
     </div>
 
-    <!-- ========================================================= -->
-    <!-- MODAL: CHILD EDIT -->
-    <!-- ========================================================= -->
+    <!-- CHILD EDIT -->
     <div v-if="editingChild !== null" class="modal">
       <div class="modal-box">
         <h3>Kind bearbeiten</h3>
@@ -153,9 +192,7 @@
       </div>
     </div>
 
-    <!-- ========================================================= -->
-    <!-- MODAL: CHILD MOVE (Popup) -->
-    <!-- ========================================================= -->
+    <!-- CHILD MOVE -->
     <div v-if="movingChild !== null" class="modal">
       <div class="modal-box">
         <h3>Movement erstellen</h3>
@@ -191,18 +228,16 @@
 </template>
 
 <script setup lang="ts">
-/* Imports */
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useDashboardDataStore } from "@/stores/dashboardDataStore";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 
-/*** Stores ***/
 const store = useDashboardDataStore();
 const admin = useAdminDataStore();
 
-console.log("🔄 Initial load Admin Dashboard...");
-
-/*** Auto-refresh ***/
+/* ==========================================================
+   AUTO REFRESH
+   ========================================================== */
 let refreshInterval: number | null = null;
 
 onMounted(async () => {
@@ -210,7 +245,7 @@ onMounted(async () => {
   admin.loadDevices();
   admin.loadChildren?.();
 
-  refreshInterval = window.setInterval(() => {
+  refreshInterval = setInterval(() => {
     store.fetchAllDashboardData();
   }, 30000);
 });
@@ -219,11 +254,12 @@ onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval);
 });
 
-/*** Suche ***/
+/* ==========================================================
+   SUCHE
+   ========================================================== */
 const search = ref("");
 const searchRoom = ref("");
 
-/*** Kinder pro Raum filtern ***/
 const filteredOccupancy = computed(() => {
   if (!search.value) return store.occupancy || {};
 
@@ -242,77 +278,102 @@ const filteredOccupancy = computed(() => {
   return result;
 });
 
-/*** Räume filtern ***/
 const filteredRooms = computed(() => {
   if (!searchRoom.value) return store.rooms || [];
   const q = searchRoom.value.toLowerCase();
   return store.rooms.filter((r) => r.name.toLowerCase().includes(q));
 });
 
-/*** Datum formatieren ***/
-const formatDate = (iso?: string) =>
-  iso
-    ? new Date(iso).toLocaleString("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    })
-    : "";
+/* ==========================================================
+   LIVE-ZEIT PRO KIND
+   ========================================================== */
+const now = ref(Date.now());
+setInterval(() => now.value = Date.now(), 1000);
 
-/* ========================================================= */
-/* DRAG & DROP MOVEMENT */
-/* ========================================================= */
+const timeInRoomByChild = computed(() => {
+  const result: Record<number, string> = {};
+  const list = store.latestMovements || [];
 
+  const byChild = new Map<number, any>();
+
+  list.forEach(m => {
+    if (!byChild.has(m.child.id)) byChild.set(m.child.id, m);
+  });
+
+  byChild.forEach((m, childId) => {
+    const diff = (now.value - new Date(m.occurred_at).getTime()) / 1000;
+    const h = String(Math.floor(diff / 3600)).padStart(2, "0");
+    const min = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
+    const s = String(Math.floor(diff % 60)).padStart(2, "0");
+    result[childId] = `${h}:${min}:${s}`;
+  });
+
+  return result;
+});
+
+function getDurationColor(id: number) {
+  const txt = timeInRoomByChild.value[id];
+  if (!txt) return "";
+
+  const [h, m] = txt.split(":").map(Number);
+  const total = h * 60 + m;
+
+  if (total < 10) return "green-time";
+  if (total < 30) return "yellow-time";
+  return "red-time";
+}
+
+/* ==========================================================
+   SORTIERUNG PRO RAUM
+   ========================================================== */
+const sortOrderByRoom = ref<Record<number, "asc" | "desc">>({});
+
+function sortChildrenForRoom(roomId: number, children: any[]) {
+  const order = sortOrderByRoom.value[roomId] || "desc";
+
+  function ts(child: any) {
+    const move = store.latestMovements.find(m => m.child.id === child.child_id);
+    return move ? new Date(move.occurred_at).getTime() : 0;
+  }
+
+  return [...children].sort((a, b) =>
+    order === "asc" ? ts(a) - ts(b) : ts(b) - ts(a)
+  );
+}
+
+/* ==========================================================
+   DRAG & DROP
+   ========================================================== */
 const draggedChild = ref<any>(null);
 
 function handleDragStart(child: any) {
-  console.log("[DRAG] start:", child);
   draggedChild.value = child;
 }
 
 async function handleDrop(room: any) {
-  console.log("[DROP] Kind:", draggedChild.value, "→ Raum:", room);
-
   const device = admin.devices.find((d) => d.room_id === room.id);
-
-  if (!device) {
-    console.warn(" ❗ Kein Gerät für Raum:", room.name);
-    return;
-  }
+  if (!device) return;
 
   const child = draggedChild.value;
-
-  console.log("🔎 Resolve tracker for child:", child);
 
   const tracker =
     child.tracker_uid ??
     admin.children.find((c) => c.id == child.id)?.tracker_uid ??
-    admin.children.find((c) => c.id == child.child_id)?.tracker_uid ??
-    null;
+    admin.children.find((c) => c.id == child.child_id)?.tracker_uid ?? null;
 
-  if (!tracker) {
-    console.error("❌ Tracker nicht gefunden → Abbruch");
-    return;
-  }
+  if (!tracker) return;
 
-  const payload = {
+  await admin.sendScanEvent({
     device_key: device.device_key,
-    tracker_uid: tracker,
-    event_time: undefined
-  };
+    tracker_uid: tracker
+  });
 
-  console.log("📡 Movement senden:", payload);
-  await admin.sendScanEvent(payload);
-
-  console.log("🔄 Reload after move");
   await store.fetchAllDashboardData();
 }
 
-/* ========================================================= */
-/* CHILD EDIT */
-/* ========================================================= */
+/* ==========================================================
+   CHILD EDIT
+   ========================================================== */
 const editingChild = ref<number | null>(null);
 
 const childForm = reactive({
@@ -323,12 +384,12 @@ const childForm = reactive({
 });
 
 function openChildEdit(child: any) {
-  editingChild.value = Number(child.id ?? child.child_id);
+  editingChild.value = child.id ?? child.child_id;
 
-  childForm.name = child.name ?? "";
-  childForm.photo_url = child.photo_url ?? "";
-  childForm.tracker_uid = child.tracker_uid ?? "";
-  childForm.is_active = child.is_active ?? true;
+  childForm.name = child.name;
+  childForm.photo_url = child.photo_url;
+  childForm.tracker_uid = child.tracker_uid;
+  childForm.is_active = child.is_active;
 }
 
 async function saveChildEdit() {
@@ -337,9 +398,9 @@ async function saveChildEdit() {
   await store.fetchAllDashboardData();
 }
 
-/* ========================================================= */
-/* ROOM EDIT */
-/* ========================================================= */
+/* ==========================================================
+   ROOM EDIT
+   ========================================================== */
 const editingRoom = ref<number | null>(null);
 
 const roomForm = reactive({
@@ -351,7 +412,7 @@ const roomForm = reactive({
 });
 
 function openRoomEdit(room: any) {
-  editingRoom.value = Number(room.id);
+  editingRoom.value = room.id;
   roomForm.name = room.name;
   roomForm.area = room.area;
   roomForm.capacity = room.capacity;
@@ -365,58 +426,50 @@ async function saveRoomEdit() {
   await store.fetchAllDashboardData();
 }
 
-/* ========================================================= */
-/* POPUP MOVEMENT */
-/* ========================================================= */
+/* ==========================================================
+   CHILD MOVE POPUP
+   ========================================================== */
 const movingChild = ref<any>(null);
 const moveDeviceKey = ref<string>("");
 const moveEventTime = ref<string>("");
 
 function openChildMove(child: any) {
-  console.log("[MOVE] openChildMove → child:", child);
   movingChild.value = child;
-
-  if (!admin.devices.length) {
-    admin.loadDevices();
-  }
 }
 
 async function performMove() {
-  console.log("[MOVE] performMove() → child:", movingChild.value);
-  console.log("[MOVE] admin.children length:", admin.children.length);
-  console.log("[MOVE] selected deviceKey:", moveDeviceKey.value);
-
   const child = movingChild.value;
 
   const tracker =
     child.tracker_uid ??
     admin.children.find((c) => c.id == child.id)?.tracker_uid ??
-    admin.children.find((c) => c.id == child.child_id)?.tracker_uid ??
-    null;
+    admin.children.find((c) => c.id == child.child_id)?.tracker_uid ?? null;
 
-  if (!tracker) {
-    alert("Dieses Kind hat keinen Tracker UID!");
-    return;
-  }
+  if (!tracker) return;
 
-  const payload = {
+  await admin.sendScanEvent({
     device_key: moveDeviceKey.value,
     tracker_uid: tracker,
     event_time: moveEventTime.value || undefined
-  };
-
-  console.log("📡 Movement senden:", payload);
-  await admin.sendScanEvent(payload);
+  });
 
   movingChild.value = null;
-
-  console.log("🔄 Reload after move");
   await store.fetchAllDashboardData();
+}
+
+function formatDate(iso?: string) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 </script>
 
 <style scoped>
-/* 🎨 Dein CSS unverändert */
 .dashboard {
   max-width: 1100px;
   margin: auto;
@@ -428,6 +481,23 @@ async function performMove() {
   color: #777;
   margin-bottom: 20px;
 }
+
+/* More Settings Button */
+.settings-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.settings-btn {
+  border-radius: 999px;
+  background: #0f172a;
+  color: blue;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+/* rest wie gehabt */
 
 .search-row {
   display: flex;
@@ -488,13 +558,61 @@ async function performMove() {
   flex: 1;
 }
 
+/* Zeit-Stile */
+.time-diff {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.green-time { color: #16a34a; }
+.yellow-time { color: #ca8a04; }
+.red-time { color: #dc2626; }
+
+.sort-toggle {
+  margin: 6px 0;
+}
+
+.sort-toggle button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #f2f2f2;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sort-toggle button:hover {
+  background: #e3e3e3;
+}
+
 .btn-xs {
   padding: 4px 8px;
   background: #ececec;
   border-radius: 6px;
   cursor: pointer;
   border: none;
-  font-size: 12px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* hübschere Varianten */
+.btn-edit {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.btn-edit:hover {
+  background: #bfdbfe;
+}
+
+.btn-move {
+  background: #ecfdf3;
+  color: #15803d;
+}
+.btn-move:hover {
+  background: #bbf7d0;
 }
 
 .btn {

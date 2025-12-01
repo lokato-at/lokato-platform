@@ -88,7 +88,7 @@ const routes = [
      - Hinweis: AdminView kann (und sollte) Links/Buttons zu /admin/children, /admin/rooms etc. enthalten.
   ------------------------------------------------------------------ */
   {
-    path: "/admin",
+    path: "/admin/home",
     name: "AdminHome",
     component: AdminView,
   },
@@ -128,7 +128,7 @@ const routes = [
   },
 
   {
-    path: "/admin/dashboard",
+    path: "/admin/",
     name: "AdminDashboardView",
     component: AdminDashboardView,
   },

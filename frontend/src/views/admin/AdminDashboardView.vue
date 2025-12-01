@@ -24,7 +24,13 @@
       <h2>Räume</h2>
 
       <div class="rooms">
-        <div v-for="room in filteredRooms" :key="room.id" class="room">
+        <div
+          v-for="room in filteredRooms"
+          :key="room.id"
+          class="room"
+          @dragover.prevent
+          @drop="handleDrop(room)"
+        >
 
           <!-- Raumkopf -->
           <div class="room-header">
@@ -60,6 +66,8 @@
               v-for="child in filteredOccupancy[String(room.id)]?.children || []"
               :key="child.child_id || child.id"
               class="child"
+              draggable="true"
+              @dragstart="handleDragStart(child)"
             >
               <img
                 :src="child.photo_url || 'https://via.placeholder.com/40?text=?'"
@@ -68,17 +76,11 @@
 
               <span class="child-name">{{ child.name }}</span>
 
-              <!-- Edit -->
+              <!-- 🔧 Edit -->
               <button class="btn-xs" @click="openChildEdit(child)">✏</button>
 
-              <!-- Move -->
+              <!-- 🔧 Popup-Move -->
               <button class="btn-xs" @click="openChildMove(child)">↦</button>
-
-              <!-- TODO: Kinder Movement hat noch Fehler (Findet keine Tracker UID)
-
-                    TODO: Findet generell zu wenige Daten also die Seite an sich ist noch in Testphase
-               -->
-
             </li>
 
             <li
@@ -123,7 +125,6 @@
         <label>Bereich<input v-model="roomForm.area" /></label>
         <label>Kapazität<input type="number" v-model.number="roomForm.capacity" /></label>
         <label>Toleranz<input type="number" v-model.number="roomForm.tolerance" /></label>
-
         <label><input type="checkbox" v-model="roomForm.is_active" /> Aktiv</label>
 
         <div class="modal-actions">
@@ -153,7 +154,7 @@
     </div>
 
     <!-- ========================================================= -->
-    <!-- MODAL: CHILD MOVE (SCAN SIMULATOR) -->
+    <!-- MODAL: CHILD MOVE (Popup) -->
     <!-- ========================================================= -->
     <div v-if="movingChild !== null" class="modal">
       <div class="modal-box">
@@ -191,27 +192,23 @@
 
 <script setup lang="ts">
 /* Imports */
-import {
-  ref,
-  reactive,
-  computed,
-  onMounted,
-  onUnmounted
-} from "vue";
-
+import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useDashboardDataStore } from "@/stores/dashboardDataStore";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 
-/* Stores */
+/*** Stores ***/
 const store = useDashboardDataStore();
 const admin = useAdminDataStore();
 
-/* Auto-refresh */
+console.log("🔄 Initial load Admin Dashboard...");
+
+/*** Auto-refresh ***/
 let refreshInterval: number | null = null;
 
 onMounted(async () => {
   await store.fetchAllDashboardData();
   admin.loadDevices();
+  admin.loadChildren?.();
 
   refreshInterval = window.setInterval(() => {
     store.fetchAllDashboardData();
@@ -222,11 +219,11 @@ onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval);
 });
 
-/* Suche */
+/*** Suche ***/
 const search = ref("");
 const searchRoom = ref("");
 
-/* Kinder pro Raum filtern */
+/*** Kinder pro Raum filtern ***/
 const filteredOccupancy = computed(() => {
   if (!search.value) return store.occupancy || {};
 
@@ -245,14 +242,14 @@ const filteredOccupancy = computed(() => {
   return result;
 });
 
-/* Räume filtern */
+/*** Räume filtern ***/
 const filteredRooms = computed(() => {
   if (!searchRoom.value) return store.rooms || [];
   const q = searchRoom.value.toLowerCase();
   return store.rooms.filter((r) => r.name.toLowerCase().includes(q));
 });
 
-/* Datum formatieren */
+/*** Datum formatieren ***/
 const formatDate = (iso?: string) =>
   iso
     ? new Date(iso).toLocaleString("de-DE", {
@@ -265,30 +262,51 @@ const formatDate = (iso?: string) =>
     : "";
 
 /* ========================================================= */
-/* ROOM EDIT */
+/* DRAG & DROP MOVEMENT */
 /* ========================================================= */
-const editingRoom = ref<number | null>(null);
 
-const roomForm = reactive({
-  name: "",
-  area: "",
-  capacity: 0,
-  tolerance: 0,
-  is_active: true
-});
+const draggedChild = ref<any>(null);
 
-function openRoomEdit(room: any) {
-  editingRoom.value = Number(room.id);
-  roomForm.name = room.name;
-  roomForm.area = room.area;
-  roomForm.capacity = room.capacity;
-  roomForm.tolerance = room.tolerance;
-  roomForm.is_active = room.is_active;
+function handleDragStart(child: any) {
+  console.log("[DRAG] start:", child);
+  draggedChild.value = child;
 }
 
-async function saveRoomEdit() {
-  await admin.updateRoom(editingRoom.value!, { ...roomForm });
-  editingRoom.value = null;
+async function handleDrop(room: any) {
+  console.log("[DROP] Kind:", draggedChild.value, "→ Raum:", room);
+
+  const device = admin.devices.find((d) => d.room_id === room.id);
+
+  if (!device) {
+    console.warn(" ❗ Kein Gerät für Raum:", room.name);
+    return;
+  }
+
+  const child = draggedChild.value;
+
+  console.log("🔎 Resolve tracker for child:", child);
+
+  const tracker =
+    child.tracker_uid ??
+    admin.children.find((c) => c.id == child.id)?.tracker_uid ??
+    admin.children.find((c) => c.id == child.child_id)?.tracker_uid ??
+    null;
+
+  if (!tracker) {
+    console.error("❌ Tracker nicht gefunden → Abbruch");
+    return;
+  }
+
+  const payload = {
+    device_key: device.device_key,
+    tracker_uid: tracker,
+    event_time: undefined
+  };
+
+  console.log("📡 Movement senden:", payload);
+  await admin.sendScanEvent(payload);
+
+  console.log("🔄 Reload after move");
   await store.fetchAllDashboardData();
 }
 
@@ -320,13 +338,42 @@ async function saveChildEdit() {
 }
 
 /* ========================================================= */
-/* CHILD MOVE (SCAN SIMULATION) */
+/* ROOM EDIT */
+/* ========================================================= */
+const editingRoom = ref<number | null>(null);
+
+const roomForm = reactive({
+  name: "",
+  area: "",
+  capacity: 0,
+  tolerance: 0,
+  is_active: true
+});
+
+function openRoomEdit(room: any) {
+  editingRoom.value = Number(room.id);
+  roomForm.name = room.name;
+  roomForm.area = room.area;
+  roomForm.capacity = room.capacity;
+  roomForm.tolerance = room.tolerance;
+  roomForm.is_active = room.is_active;
+}
+
+async function saveRoomEdit() {
+  await admin.updateRoom(editingRoom.value!, { ...roomForm });
+  editingRoom.value = null;
+  await store.fetchAllDashboardData();
+}
+
+/* ========================================================= */
+/* POPUP MOVEMENT */
 /* ========================================================= */
 const movingChild = ref<any>(null);
 const moveDeviceKey = ref<string>("");
 const moveEventTime = ref<string>("");
 
 function openChildMove(child: any) {
+  console.log("[MOVE] openChildMove → child:", child);
   movingChild.value = child;
 
   if (!admin.devices.length) {
@@ -335,11 +382,12 @@ function openChildMove(child: any) {
 }
 
 async function performMove() {
-  if (!movingChild.value) return;
+  console.log("[MOVE] performMove() → child:", movingChild.value);
+  console.log("[MOVE] admin.children length:", admin.children.length);
+  console.log("[MOVE] selected deviceKey:", moveDeviceKey.value);
 
   const child = movingChild.value;
 
-  /* Universal Tracker-Resolver */
   const tracker =
     child.tracker_uid ??
     admin.children.find((c) => c.id == child.id)?.tracker_uid ??
@@ -347,29 +395,28 @@ async function performMove() {
     null;
 
   if (!tracker) {
-    alert("Dieses Kind hat keinen tracker_uid!");
+    alert("Dieses Kind hat keinen Tracker UID!");
     return;
   }
 
-  if (!moveDeviceKey.value) {
-    alert("Bitte ein Gerät auswählen!");
-    return;
-  }
-
-  await admin.sendScanEvent({
+  const payload = {
     device_key: moveDeviceKey.value,
     tracker_uid: tracker,
     event_time: moveEventTime.value || undefined
-  });
+  };
+
+  console.log("📡 Movement senden:", payload);
+  await admin.sendScanEvent(payload);
 
   movingChild.value = null;
 
-  /* Reload Dashboard */
+  console.log("🔄 Reload after move");
   await store.fetchAllDashboardData();
 }
 </script>
 
 <style scoped>
+/* 🎨 Dein CSS unverändert */
 .dashboard {
   max-width: 1100px;
   margin: auto;

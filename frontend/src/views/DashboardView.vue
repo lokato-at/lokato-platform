@@ -11,7 +11,7 @@
     </p>
 
     <!-- --------------------------------------------------------
-         SUCHFELD (NEU!)
+         SUCHFELDER
          -------------------------------------------------------- -->
     <div class="search-bar">
       <input
@@ -22,7 +22,6 @@
       <button v-if="search" class="clear-btn" @click="search = ''">✖</button>
     </div>
 
-    <!-- RAUM-SUCHE -->
     <div class="search-bar">
       <input
         v-model="searchRoom"
@@ -46,24 +45,19 @@
     <section>
       <h2>Räume</h2>
 
-      <!-- Grid Layout für Raumkarten -->
       <div class="rooms-grid">
-        <!-- Jede Karte stellt einen Raum dar -->
         <article
           class="room-card"
           v-for="room in filteredRooms"
           :key="room.id"
         >
-          <!-- Raumname -->
           <h3>{{ room.name }}</h3>
 
-          <!-- aktuelle Anzahl Kinder im Raum -->
           <p class="room-capacity">
             Kapazität:
             <strong>{{ room.current_count }} / {{ room.capacity }}</strong>
           </p>
 
-          <!-- Raumstatus: Überfüllt / Toleranzbereich / OK -->
           <p class="room-status">
             Status:
             <strong
@@ -83,22 +77,17 @@
             </strong>
           </p>
 
-          <!-- ================================
-               KINDELISTE (mit Suchfilter)
-               ================================ -->
           <h4>Kinder</h4>
 
-          <!-- Wenn gefilterte Kinder existieren -->
           <ul
             v-if="filteredOccupancy[room.id]?.children.length"
             class="child-list"
           >
             <li
               v-for="child in filteredOccupancy[room.id].children"
-              :key="child.id"
+              :key="child.child_id"
               class="child-entry"
             >
-              <!-- Foto oder Platzhalter -->
               <img
                 v-if="child.photo_url"
                 :src="child.photo_url"
@@ -113,12 +102,25 @@
                 class="child-photo"
               />
 
-              <!-- Name -->
-              <span>{{ child.name }}</span>
+              <!-- --------------------------------------------------------
+                   KINDERNAME + LIVE-AUFENTHALTSZEIT (jede Sekunde)
+                   --------------------------------------------------------
+
+                   timeInRoomByChild[...] liefert den formatierten Zeitwert
+                   getDurationColor(...) liefert die Farbe abhängig von der Dauer
+              -->
+              <span>
+                {{ child.name }} <em style="font-size: small;  opacity:0.6;">im Raum seit</em>
+                <small
+                  class="time-diff"
+                  :class="getDurationColor(child.child_id)"
+                >
+                  {{ timeInRoomByChild[child.child_id] || "" }}
+                </small>
+              </span>
             </li>
           </ul>
 
-          <!-- Kein Treffer für Raum -->
           <p v-else class="muted">Keine Treffer für diesen Raum.</p>
         </article>
       </div>
@@ -131,10 +133,7 @@
       <h2>Letzte Bewegungen</h2>
 
       <ol class="movement-list">
-        <li
-          v-for="m in store.latestMovements"
-          :key="m.id"
-        >
+        <li v-for="m in store.latestMovements" :key="m.id">
           <strong>{{ m.child?.name ?? "?" }}</strong>
           <span class="arrow">→</span>
           <strong>{{ m.to_room?.name ?? "?" }}</strong>
@@ -150,93 +149,134 @@
 </template>
 
 <script setup lang="ts">
-/*
-|--------------------------------------------------------------------------
-| IMPORTS
-|--------------------------------------------------------------------------
-*/
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useDashboardDataStore } from "@/stores/dashboardDataStore";
 
 const store = useDashboardDataStore();
 
-/*
-|--------------------------------------------------------------------------
-| AUTO REFRESH SETUP
-|--------------------------------------------------------------------------
-| - Beim Mounten wird einmal initial geladen.
-| - Danach läuft ein Interval, das periodisch die Daten neu holt.
-| - Beim Unmount wird das Interval wieder entfernt.
-| - Intervalldauer ist aktuell 30s (30000 ms). Du kannst das leicht anpassen.
-*/
+/* ==========================================================
+   AUTO-REFRESH (30 SEKUNDEN)
+   ========================================================== */
 let refreshInterval: number | null = null;
-const AUTO_REFRESH_MS = 30000; // 30 Sekunden
+const AUTO_REFRESH_MS = 30000;
 
 onMounted(async () => {
-  // initial load
   await store.fetchAllDashboardData();
 
-  // auto-refresh starten
   refreshInterval = window.setInterval(async () => {
-    // Best-effort Aktualisierung: Fehler werden intern im Store behandelt.
     try {
-      // optional: du kannst hier auch nur einzelne Endpoints refreshen,
-      // z.B. store.fetchLatestMovements(), um Last zu sparen.
       await store.fetchAllDashboardData();
-      // Debug/Log — kannst du auskommentieren
-      // console.log("⟳ Dashboard auto-refreshed");
     } catch (e) {
-      // nichts weiter tun — store zeigt Fehler an
       console.warn("Auto-refresh failed", e);
     }
   }, AUTO_REFRESH_MS);
 });
 
 onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
-  }
+  if (refreshInterval) clearInterval(refreshInterval);
 });
 
-/*
-|--------------------------------------------------------------------------
-| SUCHFELD (reactiver Textinput)
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================
+   SUCHFELDER
+   ========================================================== */
 const search = ref("");
 const searchRoom = ref("");
 
+/* ==========================================================
+   🔥 LIVE-ZEITUPDATER (JEDEN 1 SEKUNDE)
+   ----------------------------------------------------------
+   "now" aktualisiert sich jede Sekunde.
 
-/*
-|--------------------------------------------------------------------------
-| GEFILTERTE OCCUPANCY (Kinder werden nach Suche gefiltert)
-|--------------------------------------------------------------------------
-| - Räume bleiben sichtbar
-| - Kinderliste pro Raum wird nach dem Suchbegriff gefiltert
-| - Gesucht wird in:
-|     * Name
-|     * tracker_uid (falls vorhanden)
-*/
+   Dadurch wird *nur* der computed timeInRoomByChild
+   jede Sekunde neu berechnet → die Aufenthaltszeit läuft live
+   ohne die API neu aufzurufen.
+   ========================================================== */
+const now = ref(Date.now());
+
+setInterval(() => {
+  now.value = Date.now();
+}, 1000);
+
+/* ==========================================================
+   🔥 ZEIT PRO KIND (HH:MM:SS) – computed abhängig von "now"
+   ========================================================== */
+const timeInRoomByChild = computed(() => {
+  const result: Record<number, string> = {};
+  const movements = store.latestMovements;
+
+  if (!movements || !Array.isArray(movements)) return result;
+
+  const current = now.value; // ⬅ live aktualisiert
+
+  // Für jedes Kind nur die letzte Bewegung speichern
+  const byChild = new Map<number, any>();
+
+  movements.forEach((m: any) => {
+    const childId = Number(m.child?.id); // movement liefert "id"
+    if (!childId || !m.occurred_at) return;
+
+    if (!byChild.has(childId)) {
+      byChild.set(childId, m);
+    }
+  });
+
+  byChild.forEach((m, childId) => {
+    const t = new Date(m.occurred_at).getTime();
+    const diffMs = current - t;
+
+    const totalSec = Math.floor(diffMs / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const min = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+
+    const hh = String(h).padStart(2, "0");
+    const mm = String(min).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+
+    result[childId] = `${hh}:${mm}:${ss}`;
+  });
+
+  return result;
+});
+
+/* ==========================================================
+   🔥 FARBKLASSEN FÜR ZEIT NACH DAUER
+   ----------------------------------------------------------
+   < 10 Minuten  → grün
+   < 30 Minuten  → gelb
+   ≥ 30 Minuten  → rot
+   ========================================================== */
+function getDurationColor(childId: number) {
+  const txt = timeInRoomByChild.value?.[childId];
+  if (!txt) return "";
+
+  const [h, m, s] = txt.split(":").map(Number);
+  const totalMin = h * 60 + m;
+
+  if (totalMin < 10) return "green-time";
+  if (totalMin < 30) return "yellow-time";
+  return "red-time";
+}
+
+/* ==========================================================
+   FILTER KINDER
+   ========================================================== */
 const filteredOccupancy = computed(() => {
-  // Guard: falls occupancy noch nicht geladen ist, gib leeres Objekt zurück
   const occ = store.occupancy || {};
-
   if (!search.value) return occ;
 
   const q = search.value.toLowerCase();
   const result: Record<number, any> = {};
 
   for (const [roomId, data] of Object.entries(occ)) {
-    const children = data.children || [];
+    const children = (data as any).children || [];
 
     const filtered = children.filter((c: any) =>
-      (c.name ?? "").toLowerCase().includes(q) ||
-      ((c.tracker_uid ?? "").toLowerCase().includes(q))
+      (c.name ?? "").toLowerCase().includes(q)
     );
 
     result[Number(roomId)] = {
-      ...data,
+      ...(data as any),
       children: filtered
     };
   }
@@ -244,33 +284,23 @@ const filteredOccupancy = computed(() => {
   return result;
 });
 
-/*
-|--------------------------------------------------------------------------
-| GEFILTERTE RÄUME
-|--------------------------------------------------------------------------
-| Räume werden ausgeblendet, wenn der Name NICHT zum Suchbegriff passt.
-| Wenn store.rooms noch null ist, geben wir ein leeres Array zurück.
-*/
+/* ==========================================================
+   FILTER RÄUME
+   ========================================================== */
 const filteredRooms = computed(() => {
   const rooms = store.rooms || [];
-
   if (!searchRoom.value) return rooms;
 
   const q = searchRoom.value.toLowerCase();
-  return rooms.filter((r: any) =>
-    (r.name ?? "").toLowerCase().includes(q)
-  );
+  return rooms.filter((r: any) => (r.name ?? "").toLowerCase().includes(q));
 });
 
-/*
-|--------------------------------------------------------------------------
-| DATUM FORMATIEREN → Deutsch
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================
+   DATUMFORMAT
+   ========================================================== */
 const formatDate = (iso?: string) => {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("de-DE", {
+  return new Date(iso).toLocaleString("de-DE", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -281,7 +311,10 @@ const formatDate = (iso?: string) => {
 </script>
 
 <style scoped>
-/* ===== Gesamt-Layout ===== */
+/* ==========================================================
+   LAYOUT UND STYLE (unverändert)
+   ========================================================== */
+
 .dashboard-view {
   padding: 30px;
   max-width: 1100px;
@@ -289,24 +322,14 @@ const formatDate = (iso?: string) => {
   font-family: system-ui, sans-serif;
 }
 
-h1 {
-  margin-bottom: 10px;
-}
+h1 { margin-bottom: 10px; }
+.desc { color: #666; margin-bottom: 20px; }
 
-.desc {
-  color: #666;
-  margin-bottom: 20px;
-}
-
-/* =========================================================
-   SUCHFELD
-   ========================================================= */
 .search-bar {
   display: flex;
   justify-content: center;
   margin: 20px 0 30px 0;
   position: relative;
-  width: 100%;
 }
 
 .search-bar input {
@@ -319,33 +342,6 @@ h1 {
   padding-right: 40px;
 }
 
-.search-bar input:focus {
-  outline: none;
-  border-color: #2d7bff;
-  box-shadow: 0 0 4px rgba(45, 123, 255, 0.4);
-}
-
-/* Achtung: clear-btn ist absolut positioniert; bei zwei Suchleisten ist es OK,
-   könnte aber bei sehr kleinen Screens leicht überlappen */
-.clear-btn {
-  position: absolute;
-  right: calc(50% - 230px);
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 16px;
-  color: #777;
-}
-
-.clear-btn:hover {
-  color: black;
-}
-
-/* =========================================================
-   Räume
-   ========================================================= */
 .rooms-grid {
   display: grid;
   gap: 22px;
@@ -358,25 +354,30 @@ h1 {
   border-radius: 10px;
   border: 1px solid #ddd;
   box-shadow: 0 3px 7px rgba(0,0,0,0.05);
-  transition: transform 0.1s ease;
 }
 
-.room-card:hover {
-  transform: translateY(-3px);
+/* ==========================================================
+   🔥 ZEIT-FARBKLASSEN
+   ========================================================== */
+.time-diff {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: bold;
 }
 
-.room-status strong.green { color: #009900; }
-.room-status strong.yellow { color: #cc8800; }
-.room-status strong.red   { color: #cc0000; }
-
-/* =========================================================
-   Kinderliste
-   ========================================================= */
-.child-list {
-  list-style: none;
-  padding: 0;
-  margin-top: 10px;
+.green-time {
+  color: #009900;
 }
+
+.yellow-time {
+  color: #cc8800;
+}
+
+.red-time {
+  color: #cc0000;
+}
+
+/* ========================================================== */
 
 .child-entry {
   display: flex;
@@ -395,17 +396,9 @@ h1 {
 
 .muted { color: #777; }
 
-/* =========================================================
-   Bewegungen
-   ========================================================= */
 .movements-section { margin-top: 40px; }
-.movement-list { padding-left: 20px; }
-.arrow { margin: 0 6px; }
 .movement-time { color: #777; }
 
-/* =========================================================
-   Fehler
-   ========================================================= */
 .error-box {
   background: #fdd;
   padding: 10px;

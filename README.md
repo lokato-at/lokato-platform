@@ -289,3 +289,9 @@ cd backend
 composer install
 ```
 
+
+---
+
+# 🏭 Produktions-Deployment
+
+Für ein schlankes Produktiv-Setup (Docker-DB, Laravel-API, Vite-Frontend) gibt es eine Schritt-für-Schritt-Anleitung in `docs/DEPLOYMENT.md`.

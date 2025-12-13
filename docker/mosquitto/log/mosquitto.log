@@ -1,0 +1,7 @@
+1765664184: mosquitto version 2.0.22 starting
+1765664184: Config loaded from /mosquitto/config/mosquitto.conf.
+1765664184: Opening ipv4 listen socket on port 1883.
+1765664184: Opening ipv6 listen socket on port 1883.
+1765664184: mosquitto version 2.0.22 running
+1765664549: New connection from 172.20.0.1:38870 on port 1883.
+1765664549: New client connected from 172.20.0.1:38870 as lokato-backend-41696 (p1, c1, k20).

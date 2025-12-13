@@ -58,6 +58,12 @@ return [
             'level' => 'info',   // oder 'debug', wenn du mehr Details willst
         ],
 
+        'sse' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/sse.log'),
+            'level' => 'info',
+        ],
+
         'stack' => [
             'driver' => 'stack',
             'channels' => explode(',', (string) env('LOG_STACK', 'single')),

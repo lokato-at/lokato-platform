@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ChildrenController;
 use App\Http\Controllers\Api\DeviceEventController;
 use App\Http\Controllers\Api\MovementLogController;
 use App\Http\Controllers\Api\RoomsController;
+use App\Http\Controllers\Api\SseStreamController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -46,3 +47,10 @@ Route::prefix('v1')->group(function () {
 });
 
 
+Route::prefix('stream')->group(function () {
+    // Globaler Dashboard-Stream (alle Räume, Bewegungen, Alarme)
+    Route::get('/dashboard', [SseStreamController::class, 'dashboard']);
+
+    // Raum-spezifischer Stream (nur ein Raum, nur Occupancy + Alerts)
+    Route::get('/room/{room}', [SseStreamController::class, 'room']);
+});

@@ -20,20 +20,13 @@
       </router-link>
 
       <router-link
-        to="/admin"
+        to="/admin/home"
         class="nav-item"
-        :class="{ active: $route.path.startsWith('/admin') }"
+        :class="{ active: $route.path.startsWith('/admin/home') }"
       >
         Admin
       </router-link>
 
-      <router-link
-        to="/dev"
-        class="nav-item"
-        :class="{ active: $route.path.startsWith('/dev') }"
-      >
-        Dev
-      </router-link>
     </nav>
 
     <hr />

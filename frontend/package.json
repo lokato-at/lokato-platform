@@ -19,7 +19,11 @@
   "dependencies": {
     "axion": "^0.1.0",
     "axios": "^1.13.2",
+    "install": "^0.13.0",
+    "laravel-echo": "^2.2.6",
+    "npm": "^11.7.0",
     "pinia": "^3.0.3",
+    "pusher-js": "^8.4.0",
     "vue": "^3.5.22",
     "vue-router": "^4.6.3"
   },

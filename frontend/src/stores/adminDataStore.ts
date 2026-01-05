@@ -24,14 +24,14 @@ export const useAdminDataStore = defineStore("adminDataStore", {
      ===================================================================== */
   state: () => ({
     // Tabellen aus dem Backend
-    children: [] as any[],
-    rooms: [] as any[],
-    devices: [] as any[],
+    children: [] as unknown[],
+    rooms: [] as unknown[],
+    devices: [] as unknown[],
 
     //Möglichst wenig strict Types um Fehler bei backend änderungen zu vermeiden
 
     // Ergebnis des Movement-Simulators (/scan)
-    lastScanResult: null as any,
+    lastScanResult: null as unknown,
 
     // Globale Flags
     loading: false,
@@ -47,7 +47,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        -------------------------------------------------------------------
        Vereinheitlicht alle Fehlermeldungen für bessere Übersicht
     ------------------------------------------------------------------- */
-    setError(msg: string, err?: any) {
+    setError(msg: string, err?: unknown) {
       this.error = msg;
       console.error("[AdminStore ERROR]", msg, err ?? "");
     },
@@ -160,9 +160,9 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        - Backend akzeptiert kein leeres "", daher werden nur Felder
          gesendet, die auch tatsächlich Werte enthalten.
     ------------------------- */
-    async updateChild(id: number, payload: any) {
+    async updateChild(id: number, payload: unknown) {
       try {
-        const clean: any = {};
+        const clean: unknown = {};
 
         /*
          * Nur Felder mitschicken, die NICHT leer sind.
@@ -223,7 +223,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        ROOMS CRUD
        ===================================================================== */
 
-    async createRoom(payload: any) {
+    async createRoom(payload: unknown) {
       try {
         await api.post("/admin/rooms", payload);
         await this.loadRooms();
@@ -240,7 +240,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    async updateRoom(id: number, payload: any) {
+    async updateRoom(id: number, payload: unknown) {
       try {
         await api.patch(`/admin/rooms/${id}`, payload);
         await this.loadRooms();
@@ -276,7 +276,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        DEVICES CRUD
        ===================================================================== */
 
-    async createDevice(payload: any) {
+    async createDevice(payload: unknown) {
       try {
         await api.post("/admin/devices", payload);
         await this.loadDevices();
@@ -292,7 +292,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    async updateDevice(id: number, payload: any) {
+    async updateDevice(id: number, payload: unknown) {
       try {
         await api.patch(`/admin/devices/${id}`, payload);
         await this.loadDevices();

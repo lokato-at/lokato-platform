@@ -97,8 +97,8 @@ export const useDevDataStore = defineStore("devDataStore", {
     | movement.byChild = Movement Log für Child #1
     */
     movement: {
-      all: null as any,
-      byChild: null as any,
+      all: null as unknown,
+      byChild: null as unknown,
     },
 
     /*
@@ -109,12 +109,12 @@ export const useDevDataStore = defineStore("devDataStore", {
     | korrekt funktionieren.
     */
     admin: {
-      children: null as null | any[],
-      child: null as any,
-      rooms: null as null | any[],
-      room: null as any,
-      devices: null as null | any[],
-      device: null as any,
+      children: null as null | unknown[],
+      child: null as unknown,
+      rooms: null as null | unknown[],
+      room: null as unknown,
+      devices: null as null | unknown[],
+      device: null as unknown,
     },
 
     /*

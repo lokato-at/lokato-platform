@@ -12,7 +12,6 @@ import { createRouter, createWebHistory } from "vue-router";
 | Jede dieser Komponenten muss in src/views/ als .vue-Datei existieren.
 */
 import DashboardView from "../views/DashboardView.vue";
-import DevView from "../views/DevView.vue";
 import AdminView from "../views/AdminView.vue";
 
 /*
@@ -35,7 +34,7 @@ import ChildrenAdminView from "../views/admin/ChildrenAdminView.vue";
 import RoomsAdminView from "../views/admin/RoomsAdminView.vue";
 import DevicesAdminView from "../views/admin/DevicesAdminView.vue";
 import MovementAdminView from "../views/admin/MovementAdminView.vue";
-import AdminDashboardView from "@/views/admin/AdminDashboardView.vue";
+
 
 /*
 |--------------------------------------------------------------------------
@@ -44,7 +43,7 @@ import AdminDashboardView from "@/views/admin/AdminDashboardView.vue";
 | Kleine UI zum Ausführen automatischer API-Tests oder manueller Checks.
 | Wird z.B. verwendet, um alle Endpunkte automatisiert zu prüfen.
 */
-import APITestView from "../views/APITestView.vue";
+
 
 /*
 |--------------------------------------------------------------------------
@@ -127,36 +126,7 @@ const routes = [
     component: MovementAdminView,
   },
 
-  {
-    path: "/admin/",
-    name: "AdminDashboardView",
-    component: AdminDashboardView,
-  },
 
-
-  /* ------------------------------------------------------------------
-     DEV-ROHDATEN
-     - Entwicklungstool für Raw API-Dumps / Debugging
-     - URL: /dev
-     - Hier werden alle Endpunkte angezeigt — ideal für Entwickler.
-  ------------------------------------------------------------------ */
-  {
-    path: "/dev",
-    name: "Dev",
-    component: DevView,
-  },
-
-  /* ------------------------------------------------------------------
-     API TEST SUITE
-     - UI für Tests (manuelle oder automatisierte API-Tests)
-     - URL: /tests
-     - Optional: kann Logs / Test-Output anzeigen
-  ------------------------------------------------------------------ */
-  {
-    path: "/tests",
-    name: "APITests",
-    component: APITestView,
-  },
 
   /* ------------------------------------------------------------------
      FALLBACK (404-handling)
@@ -166,20 +136,7 @@ const routes = [
   { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
 ];
 
-/*
-|--------------------------------------------------------------------------
-| Router-Instanz
-|--------------------------------------------------------------------------
-| - createWebHistory nutzt die HTML5 history API (saubere URLs ohne #)
-| - import.meta.env.BASE_URL stellt sicher, dass der Router Basis-Pfad
-|   korrekt gesetzt ist (z. B. wenn die App in einem Unterverzeichnis liegt).
-|
-| Hinweis an die Designerin:
-| - Wenn ihr auf einer Seite Breadcrumbs, aktive Navigation oder
-|   Hervorhebungen für die aktuelle Route braucht, nutzt:
-|      $route.name  oder  $route.path
-|   z.B. um das aktive Menü-Item zu markieren.
-*/
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,

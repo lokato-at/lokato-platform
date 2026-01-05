@@ -166,25 +166,15 @@ import { useDashboardDataStore } from "@/stores/dashboardDataStore";
 const store = useDashboardDataStore();
 
 /* ==========================================================
-   AUTO-REFRESH (30 SEKUNDEN)
+   INITIAL LOAD + SSE
    ========================================================== */
-let refreshInterval: number | null = null;
-const AUTO_REFRESH_MS = 30000;
-
 onMounted(async () => {
-  await store.fetchAllDashboardData();
-
-  refreshInterval = window.setInterval(async () => {
-    try {
-      await store.fetchAllDashboardData();
-    } catch (e) {
-      console.warn("Auto-refresh failed", e);
-    }
-  }, AUTO_REFRESH_MS);
+  await store.fetchAllDashboardData(); // einmaliger REST-Snapshot
+  store.connectSSE();                  // 🔴 Live-Updates via SSE
 });
 
 onUnmounted(() => {
-  if (refreshInterval) clearInterval(refreshInterval);
+  store.disconnectSSE();               // SSE sauber trennen
 });
 
 /* ==========================================================
@@ -211,10 +201,9 @@ const timeInRoomByChild = computed(() => {
   if (!movements || !Array.isArray(movements)) return result;
 
   const current = now.value;
+  const byChild = new Map<number, unknown>();
 
-  const byChild = new Map<number, any>();
-
-  movements.forEach((m: any) => {
+  movements.forEach((m: unknown) => {
     const childId = Number(m.child?.id);
     if (!childId || !m.occurred_at) return;
 
@@ -247,7 +236,7 @@ function getDurationColor(childId: number) {
   const txt = timeInRoomByChild.value?.[childId];
   if (!txt) return "";
 
-  const [h, m, s] = txt.split(":").map(Number);
+  const [h, m] = txt.split(":").map(Number);
   const totalMin = h * 60 + m;
 
   if (totalMin < 10) return "green-time";
@@ -256,22 +245,23 @@ function getDurationColor(childId: number) {
 }
 
 /* ==========================================================
-   🔥 SORTIERUNG NACH EINTRITTSZEIT (pro Raum)
+   SORTIERUNG NACH EINTRITTSZEIT (pro Raum)
    ========================================================== */
 const sortOrderByRoom = ref<Record<number, "asc" | "desc">>({});
 
-function sortChildrenForRoom(roomId: number, children: any[]) {
-  const order = sortOrderByRoom.value[roomId] || "desc"; // FIXED: roomId
+function sortChildrenForRoom(roomId: number, children: unknown[]) {
+  const order = sortOrderByRoom.value[roomId] || "desc";
 
-  function getEntryTimestamp(child: any) {
-    const move = store.latestMovements.find(m => m.child?.id === child.child_id);
+  function getEntryTimestamp(child: unknown) {
+    const move = store.latestMovements.find(
+      m => m.child?.id === child.child_id
+    );
     return move ? new Date(move.occurred_at).getTime() : 0;
   }
 
   return [...children].sort((a, b) => {
     const tA = getEntryTimestamp(a);
     const tB = getEntryTimestamp(b);
-
     return order === "asc" ? tA - tB : tB - tA;
   });
 }
@@ -284,17 +274,17 @@ const filteredOccupancy = computed(() => {
   if (!search.value) return occ;
 
   const q = search.value.toLowerCase();
-  const result: Record<number, any> = {};
+  const result: Record<number, unknown> = {};
 
   for (const [roomId, data] of Object.entries(occ)) {
-    const children = (data as any).children || [];
+    const children = (data as unknown).children || [];
 
-    const filtered = children.filter((c: any) =>
+    const filtered = children.filter((c: unknown) =>
       (c.name ?? "").toLowerCase().includes(q)
     );
 
     result[Number(roomId)] = {
-      ...(data as any),
+      ...(data as unknown),
       children: filtered
     };
   }
@@ -310,7 +300,7 @@ const filteredRooms = computed(() => {
   if (!searchRoom.value) return rooms;
 
   const q = searchRoom.value.toLowerCase();
-  return rooms.filter((r: any) =>
+  return rooms.filter((r: unknown) =>
     (r.name ?? "").toLowerCase().includes(q)
   );
 });
@@ -329,6 +319,7 @@ const formatDate = (iso?: string) => {
   });
 };
 </script>
+
 
 <style scoped>
 /* ==========================================================

@@ -1,6 +1,32 @@
 import { defineStore } from "pinia";
 import api from "../api/axios";
 
+// ---------------------------------------------------------------------------
+// Types (minimal, damit vue-tsc/tsc nicht mehr auf unknown meckert)
+// ---------------------------------------------------------------------------
+export interface AdminChild {
+  id?: number;
+  name: string;
+  photo_url?: string | null;
+  tracker_uid?: string | null;
+  is_active?: boolean;
+}
+
+export interface AdminRoom {
+  id?: number;
+  name: string;
+  capacity?: number;
+  tolerance?: number;
+  current_count?: number;
+}
+
+export interface AdminDevice {
+  id?: number;
+  name: string;
+  // je nach Backend evtl. device_key/device_uid/etc.
+  device_key?: string;
+}
+
 /*
 |--------------------------------------------------------------------------
 | Admin Data Store (SSE-SAFE)
@@ -22,9 +48,9 @@ export const useAdminDataStore = defineStore("adminDataStore", {
      STATE
      ===================================================================== */
   state: () => ({
-    children: [] as unknown[],
-    rooms: [] as unknown[],
-    devices: [] as unknown[],
+    children: [] as AdminChild[],
+    rooms: [] as AdminRoom[],
+    devices: [] as AdminDevice[],
 
     // Ergebnis des Movement-Simulators (/scan)
     lastScanResult: null as unknown,
@@ -52,7 +78,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     async loadChildren() {
       try {
         const res = await api.get("/admin/children");
-        this.children = res.data;
+        this.children = res.data as AdminChild[];
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Kinder", err);
       }
@@ -61,7 +87,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     async loadRooms() {
       try {
         const res = await api.get("/admin/rooms");
-        this.rooms = res.data;
+        this.rooms = res.data as AdminRoom[];
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Räume", err);
       }
@@ -70,7 +96,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     async loadDevices() {
       try {
         const res = await api.get("/admin/devices");
-        this.devices = res.data;
+        this.devices = res.data as AdminDevice[];
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Geräte", err);
       }
@@ -101,14 +127,22 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    async updateChild(id: number, payload: unknown) {
+    async updateChild(id: number, payload: Partial<AdminChild>) {
       try {
-        const clean: unknown = {};
+        const clean: Partial<AdminChild> = {};
 
-        if (payload.name?.trim()) clean.name = payload.name;
-        if (payload.photo_url?.trim()) clean.photo_url = payload.photo_url;
-        if (payload.tracker_uid?.trim()) clean.tracker_uid = payload.tracker_uid;
-        if (typeof payload.is_active === "boolean") clean.is_active = payload.is_active;
+        if (typeof payload.name === "string" && payload.name.trim()) {
+          clean.name = payload.name;
+        }
+        if (typeof payload.photo_url === "string" && payload.photo_url.trim()) {
+          clean.photo_url = payload.photo_url;
+        }
+        if (typeof payload.tracker_uid === "string" && payload.tracker_uid.trim()) {
+          clean.tracker_uid = payload.tracker_uid;
+        }
+        if (typeof payload.is_active === "boolean") {
+          clean.is_active = payload.is_active;
+        }
 
         await api.patch(`/admin/children/${id}`, clean);
         await this.loadChildren();
@@ -130,7 +164,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        ROOMS CRUD
        ===================================================================== */
 
-    async createRoom(payload: unknown) {
+    async createRoom(payload: Pick<AdminRoom, "name"> & Partial<AdminRoom>) {
       try {
         await api.post("/admin/rooms", payload);
         await this.loadRooms();
@@ -139,7 +173,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    async updateRoom(id: number, payload: unknown) {
+    async updateRoom(id: number, payload: Partial<AdminRoom>) {
       try {
         await api.patch(`/admin/rooms/${id}`, payload);
         await this.loadRooms();
@@ -161,7 +195,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        DEVICES CRUD
        ===================================================================== */
 
-    async createDevice(payload: unknown) {
+    async createDevice(payload: Pick<AdminDevice, "name"> & Partial<AdminDevice>) {
       try {
         await api.post("/admin/devices", payload);
         await this.loadDevices();
@@ -170,7 +204,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    async updateDevice(id: number, payload: unknown) {
+    async updateDevice(id: number, payload: Partial<AdminDevice>) {
       try {
         await api.patch(`/admin/devices/${id}`, payload);
         await this.loadDevices();
@@ -192,10 +226,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
        MOVEMENT SIMULATION (/scan)
        ===================================================================== */
 
-    /*
-     * Simuliert ein Movement.
-     * Dashboard aktualisiert sich automatisch über SSE.
-     */
     async sendScanEvent(payload: {
       device_key: string;
       tracker_uid: string;
@@ -220,11 +250,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       this.error = null;
 
       try {
-        await Promise.all([
-          this.loadChildren(),
-          this.loadRooms(),
-          this.loadDevices(),
-        ]);
+        await Promise.all([this.loadChildren(), this.loadRooms(), this.loadDevices()]);
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Daten", err);
       } finally {

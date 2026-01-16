@@ -22,6 +22,12 @@ jobs:
           extensions: mbstring, pdo, mysql, bcmath
           tools: composer
 
+      - name: Prepare Laravel writable dirs
+        working-directory: backend
+        run: |
+          mkdir -p bootstrap/cache storage
+          chmod -R ug+rw bootstrap/cache storage
+
       - name: Install backend dependencies
         working-directory: backend
         run: composer install --no-dev --optimize-autoloader

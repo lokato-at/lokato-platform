@@ -4,28 +4,32 @@ import api from "../api/axios";
 // ---------------------------------------------------------------------------
 // Types (minimal, damit vue-tsc/tsc nicht mehr auf unknown meckert)
 // ---------------------------------------------------------------------------
+export interface AdminRoom {
+  id: number;
+  name: string;
+  area?: string | null;
+  capacity?: number;
+  tolerance?: number;
+  current_count?: number;
+  is_active?: boolean;
+}
+
+export interface AdminDevice {
+  id: number;
+  name: string;
+  device_key?: string;
+  room_id?: number | null;
+  room?: AdminRoom | null;
+}
+
 export interface AdminChild {
-  id?: number;
+  id: number;                 
   name: string;
   photo_url?: string | null;
   tracker_uid?: string | null;
   is_active?: boolean;
 }
 
-export interface AdminRoom {
-  id?: number;
-  name: string;
-  capacity?: number;
-  tolerance?: number;
-  current_count?: number;
-}
-
-export interface AdminDevice {
-  id?: number;
-  name: string;
-  // je nach Backend evtl. device_key/device_uid/etc.
-  device_key?: string;
-}
 
 /*
 |--------------------------------------------------------------------------

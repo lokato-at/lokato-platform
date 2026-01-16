@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Build 
 
 on:
   push:
@@ -53,47 +53,3 @@ jobs:
             docker \
             docs \
             README.md
-
-      - name: Upload artifact to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          source: "lokato-release.tar.gz"
-          target: "${{ secrets.DEPLOY_PATH }}/releases"
-
-      - name: Deploy on server
-        uses: appleboy/ssh-action@v0.1.6
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          script: |
-            set -euo pipefail
-
-            DEPLOY_BASE="${{ secrets.DEPLOY_PATH }}"
-            RELEASE_NAME="$(date +%Y%m%d%H%M%S)"
-            RELEASE_DIR="$DEPLOY_BASE/releases/$RELEASE_NAME"
-            SHARED_ENV="$DEPLOY_BASE/shared/backend/.env"
-            SHARED_STORAGE="$DEPLOY_BASE/shared/storage"
-
-            mkdir -p "$RELEASE_DIR" "$DEPLOY_BASE/shared/backend" "$SHARED_STORAGE"
-
-            tar xzf "$DEPLOY_BASE/releases/lokato-release.tar.gz" -C "$RELEASE_DIR"
-
-            if [ -f "$SHARED_ENV" ]; then
-              ln -sfn "$SHARED_ENV" "$RELEASE_DIR/backend/.env"
-            fi
-
-            rm -rf "$RELEASE_DIR/backend/storage"
-            ln -sfn "$SHARED_STORAGE" "$RELEASE_DIR/backend/storage"
-
-            cd "$RELEASE_DIR/backend"
-            php artisan storage:link --force
-            php artisan migrate --force
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-
-            ln -sfn "$RELEASE_DIR" "$DEPLOY_BASE/current"

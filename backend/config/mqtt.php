@@ -6,5 +6,5 @@ return [
     'username' => env('MQTT_USERNAME'),
     'password' => env('MQTT_PASSWORD'),
     'client_id' => env('MQTT_CLIENT_ID', 'lokato-backend'),
-    'topic_scan_wildcard' => 'lokato/v1/devices/+/scan',
+    'topic_scan_wildcard' => '/api/v1/scan',
 ];

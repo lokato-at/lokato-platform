@@ -41,15 +41,18 @@ class MqttSubscribeCommand extends Command
 
         $client->subscribe($topicScan, function (string $topic, string $message) use ($scanIngestService, &$processedOne) {
             try {
-                $deviceKey = $this->extractDeviceKeyFromTopic($topic);
-                if ($deviceKey === null) {
-                    Log::warning('MQTT topic did not match expected pattern', [
+                $payload = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
+
+                $deviceKey = $this->extractDeviceKeyFromTopic($topic)
+                    ?? (string)($payload['device_key'] ?? '');
+
+                if ($deviceKey === '') {
+                    Log::warning('MQTT scan payload missing device_key', [
                         'topic' => $topic,
+                        'message' => $message,
                     ]);
                     return;
                 }
-
-                $payload = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
 
                 $trackerUid = (string)($payload['tracker_uid'] ?? '');
                 $eventTime  = isset($payload['event_time']) ? (string)$payload['event_time'] : null;

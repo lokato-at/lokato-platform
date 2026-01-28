@@ -13,7 +13,8 @@ return new class extends Migration {
             $table->unsignedBigInteger('from_room_id')->nullable();
             $table->unsignedBigInteger('to_room_id')->nullable();
             $table->unsignedBigInteger('device_id')->nullable();
-            $table->enum('source', ['device', 'manual', 'import'])->default('device');
+            // Ist Anpassbar, für den Prototype ist es 'mqtt_scanner'
+            $table->enum('source', ['device', 'manual', 'api', 'mqtt_scanner'])->default('mqtt_scanner');
             $table->dateTime('occurred_at');
 
             $table->foreign('child_id')

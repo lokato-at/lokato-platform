@@ -7,20 +7,11 @@
       bearbeiten oder neue Datensätze anzulegen.
     </p>
 
-    <!-- ========================================================= -->
-    <!-- LOAD + ERROR -->
-    <!-- ========================================================= -->
     <div v-if="store.loading" class="info-box">⏳ Admin-Daten werden geladen…</div>
     <div v-if="store.error" class="error-box">❌ {{ store.error }}</div>
 
-    <!-- ========================================================= -->
-    <!-- ADMIN DASHBOARD CARD GRID -->
-    <!-- ========================================================= -->
     <div class="grid">
 
-      <!-- ---------------------------------------------------------
-           KINDER
-      --------------------------------------------------------- -->
       <div class="card">
         <h2>Kinder</h2>
         <p class="count">Gesamt: <strong>{{ store.children.length }}</strong></p>
@@ -33,9 +24,6 @@
         </button>
       </div>
 
-      <!-- ---------------------------------------------------------
-           RÄUME
-      --------------------------------------------------------- -->
       <div class="card">
         <h2>Räume</h2>
         <p class="count">Gesamt: <strong>{{ store.rooms.length }}</strong></p>
@@ -48,9 +36,6 @@
         </button>
       </div>
 
-      <!-- ---------------------------------------------------------
-           GERÄTE
-      --------------------------------------------------------- -->
       <div class="card">
         <h2>Geräte</h2>
         <p class="count">Gesamt: <strong>{{ store.devices.length }}</strong></p>
@@ -63,9 +48,6 @@
         </button>
       </div>
 
-      <!-- ---------------------------------------------------------
-           MOVEMENT SIMULATION
-      --------------------------------------------------------- -->
       <div class="card wide">
         <h2>Bewegungen (Test)</h2>
         <p class="text-small">
@@ -82,13 +64,7 @@
 </template>
 
 <script setup lang="ts">
-/*
-|--------------------------------------------------------------------------
-| Admin Dashboard Übersichtsseite
-|--------------------------------------------------------------------------
-| Lädt Kinder, Geräte und Räume einmalig, damit das Dashboard die
-| aktuellen Zahlen anzeigen kann.
-*/
+
 import { onMounted } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 
@@ -100,9 +76,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ==============================================================
-   BASIC LAYOUT
-============================================================== */
+
 .admin-home {
   padding: 30px;
   max-width: 1100px;
@@ -116,9 +90,6 @@ onMounted(() => {
   font-size: 15px;
 }
 
-/* ==============================================================
-   INFO + ERROR
-============================================================== */
 .info-box {
   background: #e9f3ff;
   border-left: 4px solid #3a8bfd;
@@ -133,18 +104,12 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-/* ==============================================================
-   GRID
-============================================================== */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 22px;
 }
 
-/* ==============================================================
-   ADMIN CARDS
-============================================================== */
 .card {
   background: #f8f8f8;
   border-radius: 12px;
@@ -160,7 +125,6 @@ onMounted(() => {
   margin: 0 0 10px;
 }
 
-/* etwas breitere Karte */
 .card.wide {
   grid-column: span 1;
 }
@@ -171,9 +135,6 @@ onMounted(() => {
   }
 }
 
-/* ==============================================================
-   TEXT + COUNT
-============================================================== */
 .count {
   margin: 6px 0 10px;
   font-size: 16px;
@@ -185,9 +146,6 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
-/* ==============================================================
-   BUTTONS
-============================================================== */
 .card-btn {
   background: #2d7bff;
   color: white;

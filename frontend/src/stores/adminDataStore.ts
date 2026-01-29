@@ -23,7 +23,7 @@ export interface AdminDevice {
 }
 
 export interface AdminChild {
-  id: number;                 
+  id: number;
   name: string;
   photo_url?: string | null;
   tracker_uid?: string | null;
@@ -33,39 +33,27 @@ export interface AdminChild {
 
 /*
 |--------------------------------------------------------------------------
-| Admin Data Store (SSE-SAFE)
+| Admin Data Store
 |--------------------------------------------------------------------------
 | Verwaltet ausschließlich Admin-relevante CRUD-Daten:
 | - Kinder
 | - Räume
 | - Geräte
 | - Movement-Test-Events
-|
-| WICHTIGE REGEL:
-| - Dieser Store kennt KEIN Dashboard
-| - KEINE SSE-Logik
-| - KEINE Dashboard-Reloads
-| - Admin = Command, Dashboard = Observe
 */
 export const useAdminDataStore = defineStore("adminDataStore", {
-  /* =====================================================================
-     STATE
-     ===================================================================== */
+
   state: () => ({
     children: [] as AdminChild[],
     rooms: [] as AdminRoom[],
     devices: [] as AdminDevice[],
 
-    // Ergebnis des Movement-Simulators (/scan)
     lastScanResult: null as unknown,
 
     loading: false,
     error: null as string | null,
   }),
 
-  /* =====================================================================
-     ACTIONS
-     ===================================================================== */
   actions: {
     /* -------------------------------------------------------------------
        ERROR HANDLER

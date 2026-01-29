@@ -17,11 +17,15 @@ function occupancyFor(roomId: number): OccupancySnapshot {
   return store.occupancy[roomId] ?? emptyOccupancy;
 }
 
+
 function formatTime(ts?: string) {
   if (!ts) return "--:--";
   const d = new Date(ts);
   return d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
+
+
+console.log(import.meta.env.VITE_API_BASE_URL);
 </script>
 
 <template>

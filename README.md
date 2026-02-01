@@ -1,157 +1,123 @@
-# lokato-platform
-Frontend, Backend, Database, REST-APIs
+# Lokato Platform - Backend, Frontent, Database
 
-Tristan
-Nikolai
-Selina
-Edina
+## Überblick
 
-# 🚀 Lokato Platform – Full Stack Setup
+Dieses Repository enthält den Code für Backend, Frontend und Datenbank-Anbindung.
+RFID-Scans werden über MQTT an das Backend gesendet, dort verarbeitet und in Echtzeit per Server-Sent Events (SSE) an das Browser-Frontend übertragen.
 
-Backend (Laravel) • Frontend (Vue/Vite) • MySQL (Docker)
+Es existiert ein übergeordnetes Main-Repository, das weitere Projektbereiche (z.B. Hardware, Infrastruktur, Prototype Setup) bündelt. [Lokato-main](https://github.com/lokato-at/lokato-main.git)
 
-Dieses Projekt bildet das digitale Tracking-System *Lokato* (RFID/NFC-gestütztes Raumtracking für Kinder).
-Es besteht aus:
-
-* **backend/** – Laravel 11/12 REST API
-* **frontend/** – Vue 3 + Vite
-* **docker/** – persistente MySQL-Datenbank
+Diese README beschreibt **das lokale Entwicklungs-Setup** für Entwickler:innen.
 
 ---
 
-# 📦 Voraussetzungen
+## Architektur (Kurzfassung)
 
-Installiere vorab:
+* **Frontend**
 
-* **Docker Desktop** + **WSL2** (Windows)
-* **PHP ≥ 8.2**
-* **Composer**
-* **Node.js (LTS Version)**
-* **Git**
+  * Vue.js 3 + TypeScript + Pinia
+  * Läuft im Browser
+  * Kommunikation:
 
-### Genutzte Ports
+    * REST (CRUD)
+    * SSE (Live-Updates)
 
-* MySQL → **3306**
-* Backend → **8001**
-* Frontend → **5173**
+* **Backend**
+
+  * Laravel (PHP)
+  * REST API
+  * SSE Endpunkte für Live-Daten
+  * MQTT Subscriber zur Verarbeitung von Scan-Events
+
+* **Docker**
+
+  * MySQL Datenbank
+  * Mosquitto MQTT Broker
+
+* **Hardware (konzeptionell)**
+
+  * RFID Reader → ESP32 → MQTT Publish
 
 ---
 
-# 🛠 1. Initiales Setup (nur beim ersten Mal)
+## Technologie-Stack
 
-## 1.1 Repository klonen
+* Frontend: Vue 3, TypeScript, Pinia, Vite
+* Backend: Laravel (REST, SSE)
+* Messaging: MQTT (Mosquitto)
+* Datenbank: MySQL (Docker)
+
+---
+
+## Voraussetzungen
+
+Bitte stelle sicher, dass folgende Tools installiert sind:
+
+* Docker & Docker Compose
+* PHP (passend zur Laravel-Version)
+* Composer
+* Node.js + npm
+
+---
+
+## Ports & URLs (lokal)
+
+| Dienst       | URL / Port                                                   |
+| ------------ | ------------------------------------------------------------ |
+| Frontend     | [http://localhost:5173](http://localhost:5173)               |
+| Backend API  | [http://localhost:8001](http://localhost:8001)               |
+| API Base URL | [http://localhost:8001/api/v1](http://localhost:8001/api/v1) |
+| MySQL        | localhost:3306 (Docker)                                      |
+| phpmyadmin   | [http://localhost:8090](http://localhost:8090/) (Docker)     |
+| MQTT Broker  | 1883                                                         |
+
+---
+
+## Lokales Dev-Setup
+
+### 1. Docker Container starten
+
+Im Projektverzeichnis:
 
 ```bash
-git clone <REPO_URL> lokato-platform
-cd lokato-platform
-```
-
----
-
-## 1.2 MySQL in Docker starten
-
-```bash
-cd docker
 docker compose up -d
-cd ..
 ```
 
-### Check ob MySQL läuft:
+Dadurch werden gestartet:
 
-```bash
-docker ps
-```
-
-Es muss ein Container mit Port **3306** sichtbar sein.
+* MySQL
+* Mosquitto MQTT Broker
 
 ---
 
-# 🕋 1.3 Backend (Laravel) installieren
+### 2. Backend einrichten & starten
 
 ```bash
 cd backend
 composer install
 cp .env.example .env
-```
-
-### `.env` konfigurieren:
-
-```
-APP_URL=http://127.0.0.1:8001
-
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=lokato_db
-DB_USERNAME=admin
-DB_PASSWORD=admin
-```
-
-### App-Key erzeugen:
-
-```bash
 php artisan key:generate
-```
-
-### Migrationen + Seed:
-
-```bash
 php artisan migrate --seed
-```
-
----
-
-## Backend starten
-
-Standard:
-
-```bash
 php artisan serve --host=127.0.0.1 --port=8001
 ```
 
-### ⚠️ WICHTIG
-
-Falls dieser Fehler kommt:
+Backend läuft anschließend unter:
 
 ```
-Failed to listen on 127.0.0.1:8001 (reason: ?)
-```
-
-Dann **diesen alternativen Startbefehl** verwenden:
-
-```bash
-php -d variables_order=GPCS artisan serve --host=127.0.0.1 --port=8001
-```
-
-➡ Ursache: Manche PHP-Installationen haben falsche `variables_order`-Settings.
-
----
-
-### Backend Health Check
-
-Öffne:
-
-```
-http://127.0.0.1:8001/api/ping
-```
-
-oder:
-
-```
-http://127.0.0.1:8001/api/health
+http://localhost:8001
 ```
 
 ---
 
-# 🎨 1.4 Frontend installieren
+### 3. Frontend einrichten & starten
 
 ```bash
-cd ../frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-Frontend:
+Frontend läuft unter:
 
 ```
 http://localhost:5173
@@ -159,139 +125,136 @@ http://localhost:5173
 
 ---
 
-# 🧪 1.5 Tests
+## MQTT Subscriber
 
-### Backend-Tests:
+Das Backend verarbeitet RFID-Scans **nicht automatisch**.
+Der MQTT Subscriber muss **manuell** in einem neuen Terminal gestartet werden.
+
+### Start des Subscribers
 
 ```bash
-cd backend
-php artisan test
+php artisan mqtt:subscribe
 ```
+
+### Optionen
+
+* `--once`
+
+  * Verarbeitet genau **einen** Scan und beendet sich danach
+
+* `--debug`
+
+  * Zusätzliche Debug-Ausgaben im Terminal
+
+Beispiel:
+
+```bash
+php artisan mqtt:subscribe --debug --once
+```
+
+### Typischer Dev-Workflow
+
+* Terminal 1: Docker läuft
+* Terminal 2: Backend (`php artisan serve`)
+* Terminal 3: MQTT Subscriber
+* Terminal 4: Frontend
 
 ---
 
-# 🌡 1.6 Installation überprüfen
+## SSE – Live Updates
 
-| Bereich            | Check                              |
-| ------------------ | ---------------------------------- |
-| Docker läuft       | `docker ps` zeigt MySQL            |
-| Backend erreichbar | `http://127.0.0.1:8001/api/ping`   |
-| DB ok              | `php artisan migrate` funktioniert |
-| Frontend startet   | `npm run dev`                      |
-| API ↔ Frontend     | Netzwerkaufrufe funktionieren      |
+Das Frontend erhält Live-Daten über **Server-Sent Events (SSE)**.
 
----
+### SSE Endpunkte
 
-# 🔁 2. Projekt starten nach PC-Neustart
+* Dashboard:
 
-Ab jetzt brauchst du nur die **Start-Befehle**:
-
-## 2.1 MySQL hochfahren
-
-```bash
-cd docker
-docker compose up -d
-cd ..
-```
-
-## 2.2 Backend starten
-
-Standard:
-
-```bash
-cd backend
-php artisan serve --host=127.0.0.1 --port=8001
-```
-
-Falls Fehler → Alternative:
-
-```bash
-php -d variables_order=GPCS artisan serve --host=127.0.0.1 --port=8001
-```
-
-## 2.3 Frontend starten
-
-```bash
-cd frontend
-npm run dev
-```
-
----
-
-# 📚 Nützliche Laravel-Befehle
-
-- **php artisan optimize:clear**  
-  Löscht alle Laravel-Caches (Config, Route, View, Events).
-
-- **php artisan route:list**  
-  Listet alle registrierten Routen der Anwendung auf.
-
-- **php artisan migrate:status**  
-  Zeigt den Status aller Datenbankmigrationen (ausgeführt / nicht ausgeführt).
-
-- **php artisan storage:link**  
-  Erstellt einen Symlink, um `storage/app/public` über `public/storage` zugänglich zu machen.
-
-- **php artisan migrate:reset**  
-  Macht **alle Migrationen rückgängig** und setzt die Datenbank auf den Zustand vor den Migrationen zurück.
-
-
----
-
-# 🧰 Troubleshooting
-
-### ❗ Backend startet nicht (Port 8001 Fehler)
-
-Wenn du dies siehst:
-
-```
-Failed to listen on 127.0.0.1:8001 (reason: ?)
-```
-
-dann:
-
-```bash
-php -d variables_order=GPCS artisan serve --host=127.0.0.1 --port=8001
-```
-
-### ❗ MySQL-Container startet nicht
-
-* Port 3306 belegt?
-* Prüfen:
-
-  ```bash
-  netstat -ano | findstr 3306
+  ```
+  GET /api/stream/dashboard
   ```
 
-### ❗ Laravel erreicht MySQL nicht
+* Raum-spezifisch:
 
-In `backend/`:
+  ```
+  GET /api/stream/room/{room}
+  ```
 
-```bash
-php artisan tinker
-DB::connection()->getPdo();
+Beispiel:
+
 ```
-
-Wenn Fehler → `.env` prüfen.
-
-### ❗ Vite-Port 5173 belegt
-
-```bash
-npm run dev -- --port=5174
+http://localhost:8001/api/stream/dashboard
 ```
-
-### ❗ vendor fehlt
-
-Immer im Ordner `backend/` ausführen:
-
-```bash
-cd backend
-composer install
-```
-
 
 ---
 
-# 🏭 Produktions-Deployment
+## Testen ohne Hardware 
 
-Für ein schlankes Produktiv-Setup (Docker-DB, Laravel-API, Vite-Frontend) gibt es eine Schritt-für-Schritt-Anleitung in `docs/DEPLOYMENT.md`.
+Um das System ohne ESP32/RFID-Hardware zu testen, können MQTT-Nachrichten manuell gesendet werden.
+
+### MQTT Subscribe (Debug)
+
+```bash
+docker exec -it lokato-mosquitto mosquitto_sub -v -t "/api/v1/scan"
+```
+
+### MQTT Publish (Scan simulieren)
+
+```bash
+docker exec -it lokato-mosquitto mosquitto_pub \
+  -t "/api/v1/scan" \
+  -m '{"device_key":"RaspberryChild02","tracker_uid":"0X000017570D02640950B9462C","event_time":"2026-01-26T12:00:00+00:00"}'
+```
+
+Erwartetes Verhalten:
+
+* Backend verarbeitet das Event (Subscriber muss laufen)
+* SSE sendet Live-Update
+* Frontend aktualisiert sich automatisch
+
+---
+
+## Logging & Debugging
+
+Im Ordner `backend/storage/logs`:
+
+* `scan.log`
+
+  * Alle verarbeiteten Scan-Events (MQTT)
+
+* `sse.log`
+
+  * SSE Verbindungen & Events
+
+* `laravel.log`
+
+  * Allgemeine Backend-Logs
+
+Diese Logs sind die **erste Anlaufstelle bei Problemen**.
+
+---
+
+## Troubleshooting
+
+### Keine Live-Updates im Frontend
+
+* Läuft der MQTT Subscriber?
+* Ist das SSE-Endpoint erreichbar?
+* Siehe `sse.log`
+
+### MQTT Events kommen nicht an
+
+* Läuft der Mosquitto Container?
+* Stimmt das Topic `/api/v1/scan`?
+* Siehe `scan.log`
+
+---
+
+## Hinweise
+
+* Diese README beschreibt **das Dev-Setup**
+* Deployment & Raspberry-Pi-Konfiguration sind separat dokumentiert
+* Hardware ist für lokale Entwicklung **nicht erforderlich**
+
+---
+
+

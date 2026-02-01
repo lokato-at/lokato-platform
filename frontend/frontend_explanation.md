@@ -1,5 +1,6 @@
 📘 Lokato Platform – Frontend (Source Code Dokumentation)
 
+
 🎯 Rolle des Frontends
 
 Das Frontend der Lokato Platform ist eine Single-Page-Application, die als reine Präsentations- und Interaktionsschicht fungiert.Es stellt Dashboards und Admin-Views bereit und kommuniziert ausschließlich über REST-APIs sowie Server-Sent Events (SSE) mit dem Backend.

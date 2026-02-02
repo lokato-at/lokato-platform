@@ -147,3 +147,8 @@ docker/**/.data*/
 docker/**/data/
 docker/**/tmp/
 docker/**/logs/
+docker/**/log/
+docker/mosquitto/log/*.log
+docker/mosquitto/log/mosquitto.log
+
+

@@ -1,6 +1,11 @@
 import { defineStore } from "pinia";
 import api from "../api/axios";
 
+type AdminResourceKey = "children" | "rooms" | "devices";
+
+const resourceLoadPromises: Partial<Record<AdminResourceKey, Promise<void>>> = {};
+let loadAllAdminDataPromise: Promise<void> | null = null;
+
 /*
 |--------------------------------------------------------------------------
 | Admin Data Store
@@ -59,13 +64,24 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     /* -------------------------
        Lade alle Kinder
     ------------------------- */
-    async loadChildren() {
-      try {
-        const res = await api.get("/admin/children");
-        this.children = res.data;
-      } catch (err) {
-        this.setError("Fehler beim Laden der Admin-Kinder", err);
+    async loadChildren(force = false) {
+      if (!force && resourceLoadPromises.children) {
+        return resourceLoadPromises.children;
       }
+
+      const request = (async () => {
+        try {
+          const res = await api.get("/admin/children");
+          this.children = res.data;
+        } catch (err) {
+          this.setError("Fehler beim Laden der Admin-Kinder", err);
+        } finally {
+          delete resourceLoadPromises.children;
+        }
+      })();
+
+      resourceLoadPromises.children = request;
+      return request;
     },
 
     //Alle Kinder werden über Admin API geladen
@@ -73,25 +89,47 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     /* -------------------------
        Lade alle Räume
     ------------------------- */
-    async loadRooms() {
-      try {
-        const res = await api.get("/admin/rooms");
-        this.rooms = res.data;
-      } catch (err) {
-        this.setError("Fehler beim Laden der Admin-Räume", err);
+    async loadRooms(force = false) {
+      if (!force && resourceLoadPromises.rooms) {
+        return resourceLoadPromises.rooms;
       }
+
+      const request = (async () => {
+        try {
+          const res = await api.get("/admin/rooms");
+          this.rooms = res.data;
+        } catch (err) {
+          this.setError("Fehler beim Laden der Admin-Räume", err);
+        } finally {
+          delete resourceLoadPromises.rooms;
+        }
+      })();
+
+      resourceLoadPromises.rooms = request;
+      return request;
     },
 
     /* -------------------------
        Lade alle Geräte
     ------------------------- */
-    async loadDevices() {
-      try {
-        const res = await api.get("/admin/devices");
-        this.devices = res.data;
-      } catch (err) {
-        this.setError("Fehler beim Laden der Admin-Geräte", err);
+    async loadDevices(force = false) {
+      if (!force && resourceLoadPromises.devices) {
+        return resourceLoadPromises.devices;
       }
+
+      const request = (async () => {
+        try {
+          const res = await api.get("/admin/devices");
+          this.devices = res.data;
+        } catch (err) {
+          this.setError("Fehler beim Laden der Admin-Geräte", err);
+        } finally {
+          delete resourceLoadPromises.devices;
+        }
+      })();
+
+      resourceLoadPromises.devices = request;
+      return request;
     },
 
     /* =====================================================================
@@ -369,21 +407,29 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     /* =====================================================================
        LOAD EVERYTHING (Admin Dashboard)
        ===================================================================== */
-    async loadAllAdminData() {
-      this.loading = true;
-      this.error = null;
-
-      try {
-        await Promise.all([
-          this.loadChildren(),
-          this.loadRooms(),
-          this.loadDevices(),
-        ]);
-      } catch (err) {
-        this.setError("Fehler beim Laden der Admin-Daten", err);
-      } finally {
-        this.loading = false;
+    async loadAllAdminData(force = false) {
+      if (!force && loadAllAdminDataPromise) {
+        return loadAllAdminDataPromise;
       }
+
+      const request = (async () => {
+        this.loading = true;
+        this.error = null;
+
+        try {
+          await this.loadChildren(force);
+          await this.loadRooms(force);
+          await this.loadDevices(force);
+        } catch (err) {
+          this.setError("Fehler beim Laden der Admin-Daten", err);
+        } finally {
+          this.loading = false;
+          loadAllAdminDataPromise = null;
+        }
+      })();
+
+      loadAllAdminDataPromise = request;
+      return request;
     },
   },
 });

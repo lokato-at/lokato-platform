@@ -1,9 +1,6 @@
 import { defineStore } from "pinia";
 import api from "../api/axios";
 
-// ---------------------------------------------------------------------------
-// Types (minimal, damit vue-tsc/tsc nicht mehr auf unknown meckert)
-// ---------------------------------------------------------------------------
 export interface AdminRoom {
   id: number;
   name: string;
@@ -30,23 +27,22 @@ export interface AdminChild {
   is_active?: boolean;
 }
 
+export interface AdminSummary {
+  children_count: number;
+  rooms_count: number;
+  devices_count: number;
+}
 
-/*
-|--------------------------------------------------------------------------
-| Admin Data Store
-|--------------------------------------------------------------------------
-| Verwaltet ausschließlich Admin-relevante CRUD-Daten:
-| - Kinder
-| - Räume
-| - Geräte
-| - Movement-Test-Events
-*/
 export const useAdminDataStore = defineStore("adminDataStore", {
-
   state: () => ({
     children: [] as AdminChild[],
     rooms: [] as AdminRoom[],
     devices: [] as AdminDevice[],
+    summary: {
+      children_count: 0,
+      rooms_count: 0,
+      devices_count: 0,
+    } as AdminSummary,
 
     lastScanResult: null as unknown,
 
@@ -55,48 +51,61 @@ export const useAdminDataStore = defineStore("adminDataStore", {
   }),
 
   actions: {
-    /* -------------------------------------------------------------------
-       ERROR HANDLER
-    ------------------------------------------------------------------- */
     setError(msg: string, err?: unknown) {
       this.error = msg;
       console.error("[AdminStore ERROR]", msg, err ?? "");
     },
 
-    /* =====================================================================
-       LOADERS
-       ===================================================================== */
+    clearError() {
+      this.error = null;
+    },
+
+    async loadAdminSummary() {
+      this.clearError();
+
+      try {
+        const res = await api.get("/admin/summary", { timeout: 15000 });
+        this.summary = res.data as AdminSummary;
+      } catch (err) {
+        this.setError("Fehler beim Laden der Admin-Übersicht", err);
+      }
+    },
 
     async loadChildren() {
+      this.clearError();
+
       try {
-        const res = await api.get("/admin/children");
+        const res = await api.get("/admin/children", { timeout: 15000 });
         this.children = res.data as AdminChild[];
+        this.summary.children_count = this.children.length;
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Kinder", err);
       }
     },
 
     async loadRooms() {
+      this.clearError();
+
       try {
-        const res = await api.get("/admin/rooms");
+        const res = await api.get("/admin/rooms", { timeout: 15000 });
         this.rooms = res.data as AdminRoom[];
+        this.summary.rooms_count = this.rooms.length;
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Räume", err);
       }
     },
 
     async loadDevices() {
+      this.clearError();
+
       try {
-        const res = await api.get("/admin/devices");
+        const res = await api.get("/admin/devices", { timeout: 15000 });
         this.devices = res.data as AdminDevice[];
+        this.summary.devices_count = this.devices.length;
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Geräte", err);
       }
     },
-
-    /* =====================================================================
-       CHILD CRUD
-       ===================================================================== */
 
     async createChild(payload: {
       name: string;
@@ -152,10 +161,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    /* =====================================================================
-       ROOMS CRUD
-       ===================================================================== */
-
     async createRoom(payload: Pick<AdminRoom, "name"> & Partial<AdminRoom>) {
       try {
         await api.post("/admin/rooms", payload);
@@ -182,10 +187,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         this.setError("Fehler beim Löschen eines Raums", err);
       }
     },
-
-    /* =====================================================================
-       DEVICES CRUD
-       ===================================================================== */
 
     async createDevice(payload: Pick<AdminDevice, "name"> & Partial<AdminDevice>) {
       try {
@@ -214,10 +215,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    /* =====================================================================
-       MOVEMENT SIMULATION (/scan)
-       ===================================================================== */
-
     async sendScanEvent(payload: {
       device_key: string;
       tracker_uid: string;
@@ -233,16 +230,12 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    /* =====================================================================
-       LOAD EVERYTHING (Admin Overview)
-       ===================================================================== */
-
     async loadAllAdminData() {
       this.loading = true;
       this.error = null;
 
       try {
-        await Promise.all([this.loadChildren(), this.loadRooms(), this.loadDevices()]);
+        await this.loadAdminSummary();
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Daten", err);
       } finally {

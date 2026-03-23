@@ -258,3 +258,77 @@ Diese Logs sind die **erste Anlaufstelle bei Problemen**.
 ---
 
 
+## Startskripte
+
+### Windows Entwicklung
+
+Das Script `start-dev.ps1` prüft/installiert bei Bedarf per `winget`:
+
+* Docker Desktop
+* PHP
+* Composer
+* Node.js / npm
+
+Danach stellt es sicher, dass Docker läuft, startet die Container aus `docker/docker-compose.yml`, legt fehlende `.env`-Dateien aus den Example-Dateien an, führt `composer install` / `npm install` bei Bedarf aus, migriert Laravel und startet:
+
+* Backend (`php artisan serve`)
+* MQTT Subscriber (`php artisan mqtt:subscribe`)
+* Frontend (`npm run dev`)
+
+Beispiel:
+
+```powershell
+./start-dev.ps1
+```
+
+Optional:
+
+```powershell
+./start-dev.ps1 -BackendPort 8001 -FrontendPort 5173
+./start-dev.ps1 -SkipInstalls
+```
+
+### Raspberry Pi OS / Linux Produktion
+
+Das Script `start-prod-raspi.sh` ist für einen einfachen produktionsnahen Raspberry-Pi-Betrieb gedacht. Es installiert – sofern `INSTALL_DEPS=1` gesetzt ist – die benötigten Systempakete via `apt`, startet Docker, fährt die Infrastrukturcontainer hoch, installiert Backend/Frontend-Abhängigkeiten, baut das Frontend, cached Laravel und startet anschließend im Hintergrund:
+
+* Backend API
+* MQTT Subscriber
+* Frontend Preview
+
+Beispiel:
+
+```bash
+chmod +x start-prod-raspi.sh stop-prod-raspi.sh
+./start-prod-raspi.sh
+```
+
+Stoppen:
+
+```bash
+./stop-prod-raspi.sh
+```
+
+Die Hintergrundprozesse schreiben Logs nach `./logs` und PID-Dateien nach `./.run`.
+
+## .env / Docker Compose nach den Performance-Änderungen
+
+### `.env`
+
+Nach dem Performance-Update sind zwei neue Backend-Variablen sinnvoll und jetzt in `backend/.env.example` enthalten:
+
+```env
+API_SLOW_REQUEST_MS=400
+SSE_MAX_CONNECTION_SECONDS=60
+```
+
+Zusätzlich sollte im Frontend eine `.env` bzw. `frontend/.env` mit folgendem Wert vorhanden sein:
+
+```env
+VITE_API_BASE_URL=http://localhost:8001/api/v1
+```
+
+### `docker/docker-compose.yml`
+
+Für die Performance-Änderungen selbst ist **keine zwingende Änderung** an `docker/docker-compose.yml` erforderlich. Die neuen REST-/SSE-Optimierungen laufen auf Anwendungsebene. Falls du später Production-Hardening willst, wären eher Themen wie nicht veröffentlichte DB-Ports, Healthchecks und Reverse-Proxy/Process-Manager relevant – aber nicht zwingend wegen dieses Updates.
+

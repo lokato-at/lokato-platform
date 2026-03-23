@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\ChildAdminController;
 use App\Http\Controllers\Api\Admin\DeviceAdminController;
 use App\Http\Controllers\Api\Admin\RoomAdminController;
+use App\Http\Controllers\Api\Admin\AdminSummaryController;
 use App\Http\Controllers\Api\ChildrenController;
 use App\Http\Controllers\Api\DeviceEventController;
 use App\Http\Controllers\Api\MovementLogController;
@@ -34,6 +35,8 @@ Route::prefix('v1')->group(function () {
     Route::get('/rooms/{room}/occupancy', [RoomsController::class, 'occupancy']);
 
     Route::prefix('admin')->group(function () {
+
+        Route::get('/summary', AdminSummaryController::class);
 
         // /api/v1/admin/children
         Route::apiResource('children', ChildAdminController::class);

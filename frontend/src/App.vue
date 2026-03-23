@@ -33,8 +33,8 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 
 const route = useRoute();
-
 const time = ref("");
+let intervalId: ReturnType<typeof setInterval> | null = null;
 
 function updateClock() {
   const now = new Date();
@@ -47,8 +47,11 @@ function updateClock() {
 
 onMounted(() => {
   updateClock();
-  const interval = setInterval(updateClock, 1000);
-  onUnmounted(() => clearInterval(interval));
+  intervalId = setInterval(updateClock, 1000);
+});
+
+onUnmounted(() => {
+  if (intervalId) clearInterval(intervalId);
 });
 </script>
 
@@ -122,7 +125,7 @@ hr {
 }
 
 #app {
-  max-width: 900px;
+  max-width: 1100px;
   margin: auto;
   font-family: sans-serif;
   text-align: center;

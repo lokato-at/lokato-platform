@@ -118,6 +118,10 @@ return [
     |
     */
 
+    'api_slow_request_ms' => (float) env('API_SLOW_REQUEST_MS', 400),
+
+    'sse_max_connection_seconds' => (int) env('SSE_MAX_CONNECTION_SECONDS', 60),
+
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),

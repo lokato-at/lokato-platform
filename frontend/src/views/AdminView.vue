@@ -11,41 +11,28 @@
     <div v-if="store.error" class="error-box">❌ {{ store.error }}</div>
 
     <div class="grid">
-
       <div class="card">
         <h2>Kinder</h2>
-        <p class="count">Gesamt: <strong>{{ store.children.length }}</strong></p>
-        <p class="text-small">
-          Hier kannst du Kinder anlegen, bearbeiten oder löschen.
-        </p>
+        <p class="count">Gesamt: <strong>{{ store.summary.children_count }}</strong></p>
+        <p class="text-small">Hier kannst du Kinder anlegen, bearbeiten oder löschen.</p>
 
-        <button @click="$router.push('/admin/children')" class="card-btn">
-          👶 Kinder verwalten
-        </button>
+        <button class="card-btn" @click="$router.push('/admin/children')">👶 Kinder verwalten</button>
       </div>
 
       <div class="card">
         <h2>Räume</h2>
-        <p class="count">Gesamt: <strong>{{ store.rooms.length }}</strong></p>
-        <p class="text-small">
-          Räume, Kapazitäten und Toleranzen bearbeiten.
-        </p>
+        <p class="count">Gesamt: <strong>{{ store.summary.rooms_count }}</strong></p>
+        <p class="text-small">Räume, Kapazitäten und Toleranzen bearbeiten.</p>
 
-        <button @click="$router.push('/admin/rooms')" class="card-btn">
-          🏫 Räume verwalten
-        </button>
+        <button class="card-btn" @click="$router.push('/admin/rooms')">🏫 Räume verwalten</button>
       </div>
 
       <div class="card">
         <h2>Geräte</h2>
-        <p class="count">Gesamt: <strong>{{ store.devices.length }}</strong></p>
-        <p class="text-small">
-          Scanner-Geräte verwalten und Räumen zuordnen.
-        </p>
+        <p class="count">Gesamt: <strong>{{ store.summary.devices_count }}</strong></p>
+        <p class="text-small">Scanner-Geräte verwalten und Räumen zuordnen.</p>
 
-        <button @click="$router.push('/admin/devices')" class="card-btn">
-          🔧 Geräte verwalten
-        </button>
+        <button class="card-btn" @click="$router.push('/admin/devices')">🔧 Geräte verwalten</button>
       </div>
 
       <div class="card wide">
@@ -54,17 +41,13 @@
           Simuliere Bewegungsereignisse, um das Dashboard und die Logik zu testen.
         </p>
 
-        <button @click="$router.push('/admin/movements')" class="card-btn">
-          🚶 Movement Tool öffnen
-        </button>
+        <button class="card-btn" @click="$router.push('/admin/movements')">🚶 Movement Tool öffnen</button>
       </div>
-
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-
 import { onMounted } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 
@@ -76,7 +59,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
 .admin-home {
   padding: 30px;
   max-width: 1100px;
@@ -115,7 +97,7 @@ onMounted(() => {
   border-radius: 12px;
   padding: 22px;
   border: 1px solid #ddd;
-  box-shadow: 0 0 6px rgba(0,0,0,0.06);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   justify-content: space-between;

@@ -12,7 +12,10 @@ class ChildAdminController extends Controller
 {
     public function index(): JsonResponse
     {
-        $children = Child::orderBy('name')->get();
+        $children = Child::query()
+            ->select(['id', 'name', 'photo_url', 'tracker_uid', 'is_active'])
+            ->orderBy('name')
+            ->get();
 
         return response()->json($children);
     }

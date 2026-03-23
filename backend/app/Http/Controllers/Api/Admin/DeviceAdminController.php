@@ -7,13 +7,16 @@ use App\Http\Requests\Admin\Device\DeviceStoreRequest;
 use App\Http\Requests\Admin\Device\DeviceUpdateRequest;
 use App\Models\Device;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Str;
 
 class DeviceAdminController extends Controller
 {
     public function index(): JsonResponse
     {
-        $devices = Device::with('room')->orderBy('name')->get();
+        $devices = Device::query()
+            ->select(['id', 'name', 'device_key', 'room_id', 'last_seen'])
+            ->with(['room:id,name'])
+            ->orderBy('name')
+            ->get();
 
         return response()->json($devices);
     }
@@ -29,7 +32,7 @@ class DeviceAdminController extends Controller
 
     public function show(Device $device): JsonResponse
     {
-        $device->load('room');
+        $device->load('room:id,name');
 
         return response()->json($device);
     }

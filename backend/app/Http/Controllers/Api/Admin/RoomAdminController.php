@@ -13,7 +13,10 @@ class RoomAdminController extends Controller
 {
     public function index(): JsonResponse
     {
-        $rooms = Room::orderBy('name')->get();
+        $rooms = Room::query()
+            ->select(['id', 'name', 'area', 'capacity', 'tolerance', 'is_active'])
+            ->orderBy('name')
+            ->get();
 
         return response()->json($rooms);
     }
@@ -48,10 +51,9 @@ class RoomAdminController extends Controller
         try {
             $room->delete();
         } catch (QueryException $e) {
-            // z.B. wenn Devices noch auf diesen Raum zeigen (FK constraint)
             return response()->json([
                 'message' => 'Room cannot be deleted because it is still in use.',
-                'error'   => $e->getCode(),
+                'error' => $e->getCode(),
             ], 409);
         }
 

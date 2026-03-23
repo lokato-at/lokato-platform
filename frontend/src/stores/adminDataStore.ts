@@ -1,5 +1,10 @@
+import type { AxiosError, AxiosRequestConfig } from "axios";
 import { defineStore } from "pinia";
 import api from "../api/axios";
+
+const ADMIN_REQUEST_TIMEOUT_MS = 30000;
+const ADMIN_TIMEOUT_RETRY_ATTEMPTS = 2;
+const ADMIN_TIMEOUT_RETRY_DELAY_MS = 1500;
 
 export interface AdminRoom {
   id: number;
@@ -33,6 +38,14 @@ export interface AdminSummary {
   devices_count: number;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isTimeoutError = (err: unknown) => {
+  const axiosError = err as AxiosError | undefined;
+
+  return axiosError?.code === "ECONNABORTED" || axiosError?.message?.includes("timeout");
+};
+
 export const useAdminDataStore = defineStore("adminDataStore", {
   state: () => ({
     children: [] as AdminChild[],
@@ -60,11 +73,39 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       this.error = null;
     },
 
+    async getWithTimeoutRetry<T>(
+      url: string,
+      config?: AxiosRequestConfig,
+      retries = ADMIN_TIMEOUT_RETRY_ATTEMPTS,
+    ) {
+      let attempt = 0;
+
+      while (true) {
+        try {
+          return await api.get<T>(url, {
+            timeout: ADMIN_REQUEST_TIMEOUT_MS,
+            ...config,
+          });
+        } catch (err) {
+          if (!isTimeoutError(err) || attempt >= retries) {
+            throw err;
+          }
+
+          attempt += 1;
+          console.warn(
+            `[AdminStore] Timeout loading ${url}. Retry ${attempt}/${retries} in ${ADMIN_TIMEOUT_RETRY_DELAY_MS}ms.`,
+            err,
+          );
+          await sleep(ADMIN_TIMEOUT_RETRY_DELAY_MS * attempt);
+        }
+      }
+    },
+
     async loadAdminSummary() {
       this.clearError();
 
       try {
-        const res = await api.get("/admin/summary", { timeout: 15000 });
+        const res = await this.getWithTimeoutRetry<AdminSummary>("/admin/summary");
         this.summary = res.data as AdminSummary;
       } catch (err) {
         this.setError("Fehler beim Laden der Admin-Übersicht", err);
@@ -75,7 +116,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       this.clearError();
 
       try {
-        const res = await api.get("/admin/children", { timeout: 15000 });
+        const res = await this.getWithTimeoutRetry<AdminChild[]>("/admin/children");
         this.children = res.data as AdminChild[];
         this.summary.children_count = this.children.length;
       } catch (err) {
@@ -87,7 +128,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       this.clearError();
 
       try {
-        const res = await api.get("/admin/rooms", { timeout: 15000 });
+        const res = await this.getWithTimeoutRetry<AdminRoom[]>("/admin/rooms");
         this.rooms = res.data as AdminRoom[];
         this.summary.rooms_count = this.rooms.length;
       } catch (err) {
@@ -99,7 +140,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       this.clearError();
 
       try {
-        const res = await api.get("/admin/devices", { timeout: 15000 });
+        const res = await this.getWithTimeoutRetry<AdminDevice[]>("/admin/devices");
         this.devices = res.data as AdminDevice[];
         this.summary.devices_count = this.devices.length;
       } catch (err) {

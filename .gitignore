@@ -152,3 +152,4 @@ docker/mosquitto/log/*.log
 docker/mosquitto/log/mosquitto.log
 
 
+docker/mosquitto/log/mosquitto.log

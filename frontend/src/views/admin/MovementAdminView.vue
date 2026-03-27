@@ -158,6 +158,7 @@ onMounted(async () => {
         </select>
       </div>
 
+      <h4 style="margin-bottom: 0;">Scan Simulieren:</h4>
       <div class="toolbar compact">
         <select v-model="selectedChildId" class="select" aria-label="Kind auswählen">
           <option value="">Kind wählen…</option>
@@ -218,32 +219,18 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.movement-view { display: grid; gap: 14px; }
-.header { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
-.muted { margin: 4px 0 0; color: #64748b; font-size: 0.9rem; }
-.panel { border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; display: grid; gap: 10px; }
-.toolbar { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+@import '../styles/admin-shared.css';
+
+.toolbar { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
 .toolbar.compact { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
-.input, .select { border: 1px solid #dbe2ea; border-radius: 10px; padding: 9px 11px; background: #fff; }
 .groups { display: grid; gap: 12px; }
-.group-card { border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; display: grid; gap: 10px; }
 .group-header { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
-.group-header h3 { margin: 0; }
 .device-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .device-card { border: 1px solid #edf2f7; border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
 .device-name { margin: 0; font-weight: 600; }
 .device-meta { margin: 0; color: #64748b; font-size: 0.86rem; }
-.device-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.primary-btn, .secondary-btn { border-radius: 8px; padding: 7px 10px; cursor: pointer; }
-.primary-btn { border: 1px solid #1d4ed8; background: #fff; color: #1d4ed8; }
-.secondary-btn { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
 .primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.badge { border-radius: 999px; padding: 5px 9px; font-size: 0.78rem; font-weight: 600; }
-.badge.active { background: #dcfce7; color: #166534; }
-.badge.inactive { background: #fee2e2; color: #991b1b; }
-.empty-state { border: 1px dashed #dbe2ea; border-radius: 12px; padding: 16px; color: #64748b; text-align: center; }
 .result-box { margin: 0; background: #0f172a; color: #cbd5e1; border-radius: 10px; padding: 12px; overflow: auto; font-size: 0.82rem; }
-.error { color: #b91c1c; margin: 0; }
 @media (max-width: 980px) {
   .toolbar, .toolbar.compact { grid-template-columns: 1fr; }
 }

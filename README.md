@@ -77,9 +77,8 @@ Bitte stelle sicher, dass folgende Tools installiert sind:
 
 ### 1. Docker Container starten
 
-Im Projektverzeichnis:
-
 ```bash
+cd docker
 docker compose up -d
 ```
 

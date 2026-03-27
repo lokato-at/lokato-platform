@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 import type { AdminDevice, AdminRoom } from "@/stores/adminDataStore";
 
@@ -9,6 +9,22 @@ const store = useAdminDataStore();
 const searchTerm = ref("");
 const roomFilter = ref<string>("all");
 const activeFilter = ref<ActiveFilter>("all");
+const editingId = ref<number | null>(null);
+
+const form = reactive({
+  name: "",
+  device_key: "",
+  room_id: "",
+  is_active: true,
+});
+
+function activeValue(entity: unknown): boolean | undefined {
+  if (!entity || typeof entity !== "object") return undefined;
+  const record = entity as Record<string, unknown>;
+  if (typeof record.is_active === "boolean") return record.is_active;
+  if (typeof record.isActive === "boolean") return record.isActive;
+  return undefined;
+}
 
 const normalizedSearch = computed(() => searchTerm.value.trim().toLowerCase());
 
@@ -18,8 +34,12 @@ const roomOptions = computed<AdminRoom[]>(() =>
     .sort((a, b) => (a.name || "").localeCompare(b.name || "", "de")),
 );
 
-const supportsIsActive = computed(() =>
-  store.devices.some((device) => typeof device.room?.is_active === "boolean"),
+const supportsDeviceIsActive = computed(() =>
+  store.devices.some((device) => typeof activeValue(device) === "boolean"),
+);
+
+const supportsRoomIsActive = computed(() =>
+  store.rooms.some((room) => typeof activeValue(room) === "boolean"),
 );
 
 const filteredDevices = computed<AdminDevice[]>(() => {
@@ -29,36 +49,93 @@ const filteredDevices = computed<AdminDevice[]>(() => {
     const name = device.name?.toLowerCase() ?? "";
     const key = device.device_key?.toLowerCase() ?? "";
     const matchesSearch = !query || name.includes(query) || key.includes(query);
-
     if (!matchesSearch) return false;
 
-    if (roomFilter.value !== "all" && String(device.room_id ?? "") !== roomFilter.value) {
+    const resolvedRoomId = device.room_id ?? device.room?.id;
+    if (roomFilter.value !== "all" && String(resolvedRoomId ?? "") !== roomFilter.value) {
       return false;
     }
 
-    if (!supportsIsActive.value || activeFilter.value === "all") return true;
+    if (!supportsDeviceIsActive.value || activeFilter.value === "all") return true;
 
-    const roomActive = device.room?.is_active;
-    if (activeFilter.value === "active") return roomActive !== false;
-    return roomActive === false;
+    const currentStatus = activeValue(device);
+    if (activeFilter.value === "active") return currentStatus !== false;
+    return currentStatus === false;
   });
 });
 
 function roomStatusClass(device: AdminDevice) {
-  const roomActive = device.room?.is_active;
+  const roomActive = activeValue(device.room);
   if (typeof roomActive !== "boolean") return "neutral";
   return roomActive ? "active" : "inactive";
 }
 
 function roomStatusLabel(device: AdminDevice) {
-  const roomActive = device.room?.is_active;
-  if (typeof roomActive !== "boolean") return "Status offen";
+  const roomActive = activeValue(device.room);
+  if (typeof roomActive !== "boolean") return "Raum unbekannt";
   return roomActive ? "Raum aktiv" : "Raum inaktiv";
+}
+
+function deviceStatusClass(device: AdminDevice) {
+  const deviceActive = activeValue(device);
+  if (typeof deviceActive !== "boolean") return "neutral";
+  return deviceActive ? "active" : "inactive";
+}
+
+function deviceStatusLabel(device: AdminDevice) {
+  const deviceActive = activeValue(device);
+  if (typeof deviceActive !== "boolean") return "Status offen";
+  return deviceActive ? "Gerät aktiv" : "Gerät inaktiv";
+}
+
+function resetForm() {
+  editingId.value = null;
+  form.name = "";
+  form.device_key = "";
+  form.room_id = "";
+  form.is_active = true;
+}
+
+function openEdit(device: AdminDevice) {
+  editingId.value = device.id;
+  form.name = device.name ?? "";
+  form.device_key = device.device_key ?? "";
+  form.room_id = String(device.room_id ?? device.room?.id ?? "");
+  form.is_active = activeValue(device) ?? true;
+}
+
+function buildPayload() {
+  const payload: Record<string, unknown> = {
+    name: form.name.trim(),
+    device_key: form.device_key.trim() || null,
+    room_id: form.room_id ? Number(form.room_id) : null,
+  };
+
+  if (supportsDeviceIsActive.value || editingId.value) {
+    payload.is_active = form.is_active;
+  }
+
+  return payload;
+}
+
+async function saveDevice() {
+  if (!form.name.trim()) return;
+
+  const payload = buildPayload();
+
+  if (editingId.value) {
+    await store.updateDevice(editingId.value, payload as Partial<AdminDevice>);
+  } else {
+    await store.createDevice(payload as Pick<AdminDevice, "name"> & Partial<AdminDevice>);
+  }
+
+  resetForm();
 }
 
 async function remove(device: AdminDevice) {
   if (!device.id) return;
   await store.deleteDevice(device.id);
+  if (editingId.value === device.id) resetForm();
 }
 
 onMounted(async () => {
@@ -71,11 +148,40 @@ onMounted(async () => {
     <header class="view-header">
       <div>
         <h2>Geräte</h2>
-        <p class="muted">Suche nach Gerätename oder Device Key.</p>
+        <p class="muted">Geräte anlegen, bearbeiten und Räumen zuweisen.</p>
       </div>
     </header>
 
     <p v-if="store.error" class="error">{{ store.error }}</p>
+
+    <section class="form-card">
+      <h3>{{ editingId ? "Gerät bearbeiten" : "Neues Gerät" }}</h3>
+      <form class="form-grid" @submit.prevent="saveDevice">
+        <input v-model="form.name" type="text" class="input" placeholder="Name" required />
+        <input v-model="form.device_key" type="text" class="input" placeholder="Device Key" />
+
+        <select v-model="form.room_id" class="select" required>
+          <option disabled value="">Raum wählen…</option>
+          <option v-for="room in roomOptions" :key="room.id" :value="String(room.id)">
+            {{ room.name }}
+          </option>
+        </select>
+
+        <label v-if="supportsDeviceIsActive || editingId" class="checkbox">
+          <input v-model="form.is_active" type="checkbox" />
+          Gerät aktiv
+        </label>
+
+        <div class="form-actions">
+          <button class="primary-btn" type="submit">
+            {{ editingId ? "Speichern" : "Gerät erstellen" }}
+          </button>
+          <button v-if="editingId" type="button" class="secondary-btn" @click="resetForm">
+            Abbrechen
+          </button>
+        </div>
+      </form>
+    </section>
 
     <div class="toolbar">
       <input
@@ -94,14 +200,14 @@ onMounted(async () => {
       </select>
 
       <select
-        v-if="supportsIsActive"
+        v-if="supportsDeviceIsActive"
         v-model="activeFilter"
         class="select"
-        aria-label="Nach Aktivität filtern"
+        aria-label="Nach Gerätestatus filtern"
       >
-        <option value="all">Alle Status</option>
-        <option value="active">Nur aktive Räume</option>
-        <option value="inactive">Nur inaktive Räume</option>
+        <option value="all">Alle Gerätestatus</option>
+        <option value="active">Nur aktiv</option>
+        <option value="inactive">Nur inaktiv</option>
       </select>
     </div>
 
@@ -119,9 +225,17 @@ onMounted(async () => {
           <p class="meta">Raum: {{ device.room?.name || "Nicht zugeordnet" }}</p>
         </div>
 
-        <span class="badge" :class="roomStatusClass(device)">{{ roomStatusLabel(device) }}</span>
+        <div class="badges">
+          <span class="badge" :class="deviceStatusClass(device)">{{ deviceStatusLabel(device) }}</span>
+          <span v-if="supportsRoomIsActive" class="badge" :class="roomStatusClass(device)">
+            {{ roomStatusLabel(device) }}
+          </span>
+        </div>
 
-        <button class="delete-btn" @click="remove(device)">Löschen</button>
+        <div class="actions">
+          <button class="edit-btn" @click="openEdit(device)">Bearbeiten</button>
+          <button class="delete-btn" @click="remove(device)">Löschen</button>
+        </div>
       </li>
     </ul>
   </section>
@@ -131,22 +245,34 @@ onMounted(async () => {
 .admin-view { display: grid; gap: 14px; }
 .view-header { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .muted { margin: 4px 0 0; color: #64748b; font-size: 0.92rem; }
+.form-card { border: 1px solid #e6edf3; border-radius: 12px; background: #fff; padding: 12px; }
+.form-card h3 { margin: 0 0 10px; font-size: 1rem; }
+.form-grid { display: grid; gap: 9px; grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+.form-actions { display: flex; gap: 8px; }
 .toolbar { display: grid; gap: 10px; grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(160px, 220px)); }
 .input, .select { border: 1px solid #dbe2ea; border-radius: 10px; padding: 9px 11px; background: #fff; }
+.checkbox { display: inline-flex; align-items: center; gap: 8px; color: #334155; font-size: 0.9rem; }
 .device-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .device-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; }
 .title { margin: 0; font-weight: 600; }
 .meta { margin: 3px 0 0; color: #64748b; font-size: 0.9rem; }
+.badges { display: grid; gap: 6px; justify-items: end; }
+.actions { display: inline-flex; gap: 8px; }
 .badge { border-radius: 999px; padding: 5px 9px; font-size: 0.78rem; font-weight: 600; }
 .badge.active { background: #dcfce7; color: #166534; }
 .badge.inactive { background: #fee2e2; color: #991b1b; }
 .badge.neutral { background: #f1f5f9; color: #334155; }
-.delete-btn { border: 1px solid #ef4444; color: #b91c1c; background: #fff; border-radius: 9px; padding: 7px 10px; cursor: pointer; }
+.primary-btn, .secondary-btn, .edit-btn, .delete-btn { border-radius: 9px; padding: 7px 10px; cursor: pointer; background: #fff; }
+.primary-btn { border: 1px solid #1d4ed8; color: #1d4ed8; }
+.secondary-btn { border: 1px solid #cbd5e1; color: #334155; }
+.edit-btn { border: 1px solid #c7d2fe; color: #3730a3; }
+.delete-btn { border: 1px solid #ef4444; color: #b91c1c; }
 .delete-btn:hover { background: #fef2f2; }
 .empty-state { border: 1px dashed #dbe2ea; border-radius: 12px; padding: 16px; color: #64748b; text-align: center; }
 .error { color: #b91c1c; margin: 0; }
-@media (max-width: 860px) {
-  .toolbar { grid-template-columns: 1fr; }
+@media (max-width: 960px) {
+  .form-grid, .toolbar { grid-template-columns: 1fr; }
   .device-item { grid-template-columns: 1fr; align-items: start; }
+  .badges { justify-items: start; }
 }
 </style>

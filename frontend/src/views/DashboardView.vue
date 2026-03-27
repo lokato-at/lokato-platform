@@ -25,6 +25,7 @@ interface RoomCard {
   visibleChildren: Child[];
   occupancyCount: number;
   capacityLabel: string;
+  occupancyRatio: number;
   status: "ok" | "warn" | "over";
 }
 
@@ -51,6 +52,8 @@ const roomCards = computed<RoomCard[]>(() => {
       });
 
       const occupancyCount = snapshot.current_count ?? visibleChildren.length;
+      const capacity = room.capacity ?? 0;
+      const occupancyRatio = capacity > 0 ? Math.min((occupancyCount / capacity) * 100, 100) : 0;
       const status: RoomCard["status"] =
         room.status?.over_capacity ? "over" : room.status?.within_tolerance ? "warn" : "ok";
 
@@ -60,6 +63,7 @@ const roomCards = computed<RoomCard[]>(() => {
         visibleChildren,
         occupancyCount,
         capacityLabel: room.capacity != null ? String(room.capacity) : "∞",
+        occupancyRatio,
         status,
       };
     })
@@ -76,10 +80,14 @@ const roomCards = computed<RoomCard[]>(() => {
 
 const metrics = computed(() => {
   const cards = roomCards.value;
+  const overCapacity = cards.filter((card) => card.status === "over").length;
+  const warningRooms = cards.filter((card) => card.status === "warn" || card.status === "over").length;
+
   return {
     activeRooms: cards.length,
     presentChildren: cards.reduce((sum, card) => sum + card.occupancyCount, 0),
-    warningRooms: cards.filter((card) => card.status === "warn" || card.status === "over").length,
+    warningRooms,
+    overCapacity,
   };
 });
 
@@ -103,9 +111,14 @@ const filteredMovements = computed<Movement[]>(() => {
   });
 });
 
-function formatTime(ts?: string) {
-  if (!ts) return "--:--";
-  return new Date(ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+function formatDateTime(ts?: string) {
+  if (!ts) return "--";
+  return new Date(ts).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 onMounted(async () => {
@@ -142,6 +155,10 @@ onUnmounted(() => {
       <article class="metric-card">
         <p class="metric-label">Warnungen</p>
         <p class="metric-value">{{ metrics.warningRooms }}</p>
+      </article>
+      <article class="metric-card">
+        <p class="metric-label">Überbelegt</p>
+        <p class="metric-value">{{ metrics.overCapacity }}</p>
       </article>
     </div>
 
@@ -181,9 +198,20 @@ onUnmounted(() => {
               <span class="capacity">{{ card.occupancyCount }} / {{ card.capacityLabel }}</span>
             </header>
 
+            <div class="capacity-track" v-if="card.room.capacity">
+              <div class="capacity-bar" :style="{ width: `${card.occupancyRatio}%` }" />
+            </div>
+
             <ul v-if="card.visibleChildren.length" class="child-list">
-              <li v-for="child in card.visibleChildren" :key="child.id">
-                {{ child.name }}
+              <li v-for="child in card.visibleChildren" :key="child.id" class="child-item">
+                <img
+                  v-if="child.photo_url"
+                  :src="child.photo_url"
+                  :alt="`Foto von ${child.name}`"
+                  class="avatar"
+                />
+                <span v-else class="avatar placeholder">{{ child.name.charAt(0).toUpperCase() }}</span>
+                <span>{{ child.name }}</span>
               </li>
             </ul>
             <p v-else class="muted">Keine passenden Kinder.</p>
@@ -196,10 +224,11 @@ onUnmounted(() => {
 
         <ul v-if="filteredMovements.length" class="movement-list">
           <li v-for="movement in filteredMovements" :key="movement.id ?? `${movement.child_id}-${movement.occurred_at}`">
-            <span>{{ movement.child?.name ?? `Kind #${movement.child_id ?? "?"}` }}</span>
-            <span class="arrow">→</span>
-            <span>{{ movement.to_room?.name ?? "Unbekannter Raum" }}</span>
-            <time>{{ formatTime(movement.occurred_at) }}</time>
+            <div class="movement-main">
+              <strong>{{ movement.child?.name ?? `Kind #${movement.child_id ?? "?"}` }}</strong>
+              <span class="arrow">{{ movement.from_room?.name ?? "?" }} → {{ movement.to_room?.name ?? "?" }}</span>
+            </div>
+            <time>{{ formatDateTime(movement.occurred_at) }}</time>
           </li>
         </ul>
         <p v-else class="muted">Keine Bewegungen für den aktuellen Filter.</p>
@@ -214,27 +243,33 @@ onUnmounted(() => {
 .muted { margin: 0; color: #64748b; font-size: 0.9rem; }
 .connection { border-radius: 999px; padding: 8px 12px; background: #fff4cc; color: #7a5c00; font-weight: 600; }
 .connection.online { background: #dcfce7; color: #166534; }
-.metrics { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.metrics { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .metric-card { border: 1px solid #e6edf3; border-radius: 12px; padding: 11px; background: #fff; }
 .metric-label { margin: 0; color: #64748b; font-size: 0.83rem; }
 .metric-value { margin: 4px 0 0; font-size: 1.2rem; font-weight: 700; }
 .toolbar { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(180px, 1fr)); }
 .input { border: 1px solid #dbe2ea; border-radius: 10px; padding: 9px 11px; background: #fff; }
 .dashboard-grid { display: grid; gap: 16px; grid-template-columns: 2fr 1fr; align-items: start; }
-.rooms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.rooms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .room { border: 1px solid #dbe4ff; border-radius: 12px; padding: 12px; background: #fff; text-align: left; }
 .room.warn { border-color: #f59e0b; }
 .room.over { border-color: #ef4444; background: #fff7f7; }
 .room-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 .room-header h3 { margin: 0; font-size: 1rem; }
 .capacity { font-size: 0.86rem; color: #475569; background: #f8fafc; padding: 4px 8px; border-radius: 999px; }
-.child-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.capacity-track { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin-bottom: 10px; }
+.capacity-bar { height: 100%; background: linear-gradient(90deg, #60a5fa, #2563eb); }
+.child-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.child-item { display: flex; align-items: center; gap: 8px; }
+.avatar { width: 24px; height: 24px; border-radius: 999px; object-fit: cover; }
+.avatar.placeholder { background: #e2e8f0; color: #334155; font-size: 0.75rem; display: inline-flex; align-items: center; justify-content: center; }
 .movements { border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; text-align: left; }
 .movements h3 { margin: 0 0 8px; }
 .movement-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
-.movement-list li { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 8px; align-items: center; font-size: 0.92rem; }
-.arrow { color: #64748b; }
-time { color: #64748b; font-size: 0.83rem; }
+.movement-list li { border: 1px solid #edf2f7; border-radius: 9px; padding: 8px; display: grid; gap: 4px; }
+.movement-main { display: grid; gap: 4px; }
+.arrow { color: #475569; font-size: 0.86rem; }
+time { color: #64748b; font-size: 0.82rem; }
 .info, .error { text-align: left; margin: 0; }
 .error { color: #b91c1c; }
 .empty-state { border: 1px dashed #dbe2ea; border-radius: 12px; padding: 16px; color: #64748b; text-align: center; }

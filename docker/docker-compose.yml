@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: admin
-      MYSQL_DATABASE: lokato_db        
+      MYSQL_DATABASE: lokato_db
       MYSQL_USER: admin
       MYSQL_PASSWORD: admin
       TZ: Europe/Vienna
@@ -25,7 +25,7 @@ services:
     container_name: lokato-phpmyadmin
     restart: unless-stopped
     environment:
-      PMA_HOST: db          
+      PMA_HOST: db
       PMA_USER: admin
       PMA_PASSWORD: admin
       PMA_ABSOLUTE_URI: http://localhost:8090/
@@ -44,6 +44,22 @@ services:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
+
+  realtime:
+    build:
+      context: ../realtime
+    container_name: lokato-realtime
+    restart: unless-stopped
+    env_file:
+      - ../realtime/.env.example
+    environment:
+      DB_HOST: db
+      MQTT_URL: mqtt://mqtt:1883
+    ports:
+      - "8081:8081"
+    depends_on:
+      - db
+      - mqtt
 
 volumes:
   lokato_db_data:

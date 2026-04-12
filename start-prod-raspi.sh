@@ -103,7 +103,6 @@ ensure_file_from_example "$FRONTEND_DIR/.env" "$FRONTEND_DIR/.env.example"
 ensure_env_value "$BACKEND_DIR/.env" "APP_ENV" "production"
 ensure_env_value "$BACKEND_DIR/.env" "APP_DEBUG" "false"
 ensure_env_value "$BACKEND_DIR/.env" "API_SLOW_REQUEST_MS" "400"
-ensure_env_value "$BACKEND_DIR/.env" "SSE_MAX_CONNECTION_SECONDS" "60"
 
 info "Installiere Backend-Abhängigkeiten..."
 (
@@ -139,9 +138,8 @@ info "Optimiere Laravel für Produktion..."
   php artisan view:cache
 )
 
-info "Starte Laravel API, MQTT Subscriber und Frontend Preview..."
+info "Starte Laravel API und Frontend Preview..."
 start_process "$RUN_DIR/backend.pid" "$LOG_DIR/backend.log" bash -lc "cd '$BACKEND_DIR' && php -d variables_order=GPCS artisan serve --host=0.0.0.0 --port=$BACKEND_PORT"
-start_process "$RUN_DIR/mqtt-subscriber.pid" "$LOG_DIR/mqtt-subscriber.log" bash -lc "cd '$BACKEND_DIR' && php artisan mqtt:subscribe"
 start_process "$RUN_DIR/frontend.pid" "$LOG_DIR/frontend.log" bash -lc "cd '$FRONTEND_DIR' && npx vite preview --host 0.0.0.0 --port $FRONTEND_PORT"
 
 ok "Lokato Produktionsstart abgeschlossen."

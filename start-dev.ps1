@@ -165,7 +165,6 @@ if (-not $SkipDocker) {
 Write-Step "Prüfe Backend-Konfiguration..."
 Ensure-FileFromExample -TargetPath (Join-Path $BackendPath ".env") -ExamplePath (Join-Path $BackendPath ".env.example")
 Ensure-EnvValue -FilePath (Join-Path $BackendPath ".env") -Key "API_SLOW_REQUEST_MS" -Value "400"
-Ensure-EnvValue -FilePath (Join-Path $BackendPath ".env") -Key "SSE_MAX_CONNECTION_SECONDS" -Value "60"
 
 Write-Step "Prüfe Frontend-Konfiguration..."
 Ensure-FileFromExample -TargetPath (Join-Path $FrontendPath ".env") -ExamplePath (Join-Path $FrontendPath ".env.example")
@@ -207,9 +206,6 @@ try {
 
 Write-Step "Starte Laravel Backend..."
 Start-DetachedPowerShell -Title "Lokato Backend" -WorkingDirectory $BackendPath -Command "php -d variables_order=GPCS artisan serve --host=127.0.0.1 --port=$BackendPort"
-
-Write-Step "Starte MQTT Subscriber..."
-Start-DetachedPowerShell -Title "Lokato MQTT Subscriber" -WorkingDirectory $BackendPath -Command "php artisan mqtt:subscribe"
 
 Write-Step "Starte Vue Frontend..."
 Start-DetachedPowerShell -Title "Lokato Frontend" -WorkingDirectory $FrontendPath -Command "npm run dev -- --host 0.0.0.0 --port $FrontendPort"

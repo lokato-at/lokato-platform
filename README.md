@@ -3,7 +3,7 @@
 ## Überblick
 
 Dieses Repository enthält den Code für Backend, Frontend und Datenbank-Anbindung.
-RFID-Scans werden über MQTT an das Backend gesendet, dort verarbeitet und in Echtzeit per Server-Sent Events (SSE) an das Browser-Frontend übertragen.
+RFID-Scans werden über MQTT an das Backend gesendet, dort von einem Realtime-Service verarbeitet und in Echtzeit per WebSocket an das Browser-Frontend übertragen.
 
 Es existiert ein übergeordnetes Main-Repository, das weitere Projektbereiche (z.B. Hardware, Infrastruktur, Prototype Setup) bündelt. [Lokato-main](https://github.com/lokato-at/lokato-main.git)
 
@@ -20,14 +20,17 @@ Diese README beschreibt **das lokale Entwicklungs-Setup** für Entwickler:innen.
   * Kommunikation:
 
     * REST (CRUD)
-    * SSE (Live-Updates)
+    * WebSocket (Live-Updates via Realtime-Service)
 
 * **Backend**
 
   * Laravel (PHP)
-  * REST API
-  * SSE Endpunkte für Live-Daten
-  * MQTT Subscriber zur Verarbeitung von Scan-Events
+  * REST API für Initialdaten, CRUD und Admin
+
+* **Realtime Service**
+
+  * Node.js Service
+  * MQTT Subscriber + Persistenz + WebSocket Live-Events
 
 * **Docker**
 
@@ -43,7 +46,8 @@ Diese README beschreibt **das lokale Entwicklungs-Setup** für Entwickler:innen.
 ## Technologie-Stack
 
 * Frontend: Vue 3, TypeScript, Pinia, Vite
-* Backend: Laravel (REST, SSE)
+* Backend: Laravel (REST)
+* Realtime: Node.js (MQTT Ingest + WebSocket)
 * Messaging: MQTT (Mosquitto)
 * Datenbank: MySQL (Docker)
 
@@ -124,64 +128,16 @@ http://localhost:5173
 
 ---
 
-## MQTT Subscriber
+## Realtime-Service
 
-Das Backend verarbeitet RFID-Scans **nicht automatisch**.
-Der MQTT Subscriber muss **manuell** in einem neuen Terminal gestartet werden.
+Der Realtime-Service läuft als Docker-Container (`realtime`) und übernimmt MQTT-Ingest + Persistenz + WebSocket-Liveevents.
 
-### Start des Subscribers
+## WebSocket – Live Updates
 
-```bash
-php artisan mqtt:subscribe
-```
-
-### Optionen
-
-* `--once`
-
-  * Verarbeitet genau **einen** Scan und beendet sich danach
-
-* `--debug`
-
-  * Zusätzliche Debug-Ausgaben im Terminal
-
-Beispiel:
-
-```bash
-php artisan mqtt:subscribe --debug --once
-```
-
-### Typischer Dev-Workflow
-
-* Terminal 1: Docker läuft
-* Terminal 2: Backend (`php artisan serve`)
-* Terminal 3: MQTT Subscriber
-* Terminal 4: Frontend
-
----
-
-## SSE – Live Updates
-
-Das Frontend erhält Live-Daten über **Server-Sent Events (SSE)**.
-
-### SSE Endpunkte
-
-* Dashboard:
-
-  ```
-  GET /api/stream/dashboard
-  ```
-
-* Raum-spezifisch:
-
-  ```
-  GET /api/stream/room/{room}
-  ```
-
-Beispiel:
+Das Frontend erhält Live-Daten über den Realtime-Service (WebSocket):
 
 ```
-http://localhost:8001/api/stream/dashboard
+ws://localhost:8081/ws
 ```
 
 ---
@@ -206,8 +162,8 @@ docker exec -it lokato-mosquitto mosquitto_pub \
 
 Erwartetes Verhalten:
 
-* Backend verarbeitet das Event (Subscriber muss laufen)
-* SSE sendet Live-Update
+* Realtime-Service verarbeitet das Event
+* WebSocket sendet Live-Update
 * Frontend aktualisiert sich automatisch
 
 ---
@@ -219,10 +175,6 @@ Im Ordner `backend/storage/logs`:
 * `scan.log`
 
   * Alle verarbeiteten Scan-Events (MQTT)
-
-* `sse.log`
-
-  * SSE Verbindungen & Events
 
 * `laravel.log`
 
@@ -236,9 +188,8 @@ Diese Logs sind die **erste Anlaufstelle bei Problemen**.
 
 ### Keine Live-Updates im Frontend
 
-* Läuft der MQTT Subscriber?
-* Ist das SSE-Endpoint erreichbar?
-* Siehe `sse.log`
+* Läuft der Realtime-Container?
+* Ist `ws://localhost:8081/ws` erreichbar?
 
 ### MQTT Events kommen nicht an
 
@@ -271,7 +222,6 @@ Das Script `start-dev.ps1` prüft/installiert bei Bedarf per `winget`:
 Danach stellt es sicher, dass Docker läuft, startet die Container aus `docker/docker-compose.yml`, legt fehlende `.env`-Dateien aus den Example-Dateien an, führt `composer install` / `npm install` bei Bedarf aus, migriert Laravel und startet:
 
 * Backend (`php artisan serve`)
-* MQTT Subscriber (`php artisan mqtt:subscribe`)
 * Frontend (`npm run dev`)
 
 Beispiel:
@@ -292,8 +242,8 @@ Optional:
 Das Script `start-prod-raspi.sh` ist für einen einfachen produktionsnahen Raspberry-Pi-Betrieb gedacht. Es installiert – sofern `INSTALL_DEPS=1` gesetzt ist – die benötigten Systempakete via `apt`, startet Docker, fährt die Infrastrukturcontainer hoch, installiert Backend/Frontend-Abhängigkeiten, baut das Frontend, cached Laravel und startet anschließend im Hintergrund:
 
 * Backend API
-* MQTT Subscriber
 * Frontend Preview
+* Realtime Service (Docker Container)
 
 Beispiel:
 
@@ -310,24 +260,25 @@ Stoppen:
 
 Die Hintergrundprozesse schreiben Logs nach `./logs` und PID-Dateien nach `./.run`.
 
-## .env / Docker Compose nach den Performance-Änderungen
+## .env / Docker Compose
 
-### `.env`
+### `backend/.env`
 
-Nach dem Performance-Update sind zwei neue Backend-Variablen sinnvoll und jetzt in `backend/.env.example` enthalten:
+Relevante Variablen:
 
 ```env
 API_SLOW_REQUEST_MS=400
-SSE_MAX_CONNECTION_SECONDS=60
+MQTT_HOST=127.0.0.1
+MQTT_PORT=1883
 ```
 
-Zusätzlich sollte im Frontend eine `.env` bzw. `frontend/.env` mit folgendem Wert vorhanden sein:
+### `frontend/.env`
 
 ```env
 VITE_API_BASE_URL=http://localhost:8001/api/v1
+VITE_REALTIME_BASE_URL=http://localhost:8081
 ```
 
 ### `docker/docker-compose.yml`
 
-Für die Performance-Änderungen selbst ist **keine zwingende Änderung** an `docker/docker-compose.yml` erforderlich. Die neuen REST-/SSE-Optimierungen laufen auf Anwendungsebene. Falls du später Production-Hardening willst, wären eher Themen wie nicht veröffentlichte DB-Ports, Healthchecks und Reverse-Proxy/Process-Manager relevant – aber nicht zwingend wegen dieses Updates.
-
+Der Compose-Stack enthält jetzt zusätzlich den Service `realtime` (MQTT-Ingest + Persistenz + WebSocket), neben `db`, `phpmyadmin` und `mqtt`.

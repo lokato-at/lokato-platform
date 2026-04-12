@@ -123,11 +123,11 @@ function formatDateTime(ts?: string) {
 
 onMounted(async () => {
   await store.fetchAllDashboardData();
-  store.connectSSE();
+  store.connectRealtime();
 });
 
 onUnmounted(() => {
-  store.disconnectSSE();
+  store.disconnectRealtime();
 });
 </script>
 
@@ -136,10 +136,10 @@ onUnmounted(() => {
     <header class="dashboard-header">
       <div>
         <h2>Live Dashboard</h2>
-        <p class="muted">Snapshot + Live-Events in einer kompakten Übersicht.</p>
+        <p class="muted">Snapshot + direkte MQTT-nahe Live-Events in einer kompakten Übersicht.</p>
       </div>
-      <span class="connection" :class="{ online: store.sseConnected }">
-        {{ store.sseConnected ? "SSE verbunden" : "SSE verbindet…" }}
+      <span class="connection" :class="{ online: store.socketConnected }">
+        {{ store.socketConnected ? "Live verbunden" : "Live verbindet…" }}
       </span>
     </header>
 

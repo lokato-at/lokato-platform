@@ -13,9 +13,27 @@ export function buildApiUrl(path: string): string {
     return normalizedPath;
   }
 
-  if (normalizedPath.startsWith('/stream/')) {
-    return rawApiBaseUrl.replace(/\/v1$/, '') + normalizedPath;
-  }
 
   return rawApiBaseUrl + normalizedPath;
+}
+
+const rawRealtimeBaseUrl = (import.meta.env.VITE_REALTIME_BASE_URL ?? '').replace(/\/$/, '');
+
+export function buildRealtimeUrl(path = '/ws'): string {
+  if (/^wss?:\/\//.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  const realtimeBase = rawRealtimeBaseUrl
+    ? rawRealtimeBaseUrl.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
+    : '';
+
+  if (!realtimeBase) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${normalizedPath}`;
+  }
+
+  return realtimeBase + normalizedPath;
 }

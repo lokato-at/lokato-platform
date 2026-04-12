@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import api from "../api/axios";
-import { buildApiUrl } from "@/utils/api";
+import { buildRealtimeUrl } from "@/utils/api";
 
 export interface Child {
   id: number;
@@ -39,17 +39,22 @@ export interface Movement {
   occurred_at?: string;
   from_room?: { id: number; name: string } | null;
   to_room?: { id: number; name: string } | null;
-  child?: Child;
+  child?: Child | null;
   child_id?: number;
   to_room_id?: number | null;
   [key: string]: unknown;
+}
+
+interface RealtimeEnvelope<T = unknown> {
+  event: string;
+  data: T;
 }
 
 function parseJsonSafely<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T;
   } catch (error) {
-    console.warn("[DashboardStore] Failed to parse SSE payload", error);
+    console.warn("[DashboardStore] Failed to parse realtime payload", error);
     return null;
   }
 }
@@ -61,10 +66,10 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
     latestMovements: [] as Movement[],
     loading: false as boolean,
     error: null as string | null,
-    sse: null as EventSource | null,
-    sseConnected: false as boolean,
+    socket: null as WebSocket | null,
+    socketConnected: false as boolean,
     reconnectAttempts: 0 as number,
-    lastEventId: null as string | null,
+    reconnectTimer: null as ReturnType<typeof setTimeout> | null,
   }),
 
   actions: {
@@ -101,54 +106,78 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
       }
     },
 
-    connectSSE() {
-      if (this.sse) return;
+    connectRealtime() {
+      if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
+        return;
+      }
 
-      this.sse = new EventSource(buildApiUrl("/stream/dashboard"));
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
 
-      this.sse.onopen = () => {
-        this.sseConnected = true;
+      const wsUrl = buildRealtimeUrl("/ws");
+      this.socket = new WebSocket(wsUrl);
+
+      this.socket.onopen = () => {
+        this.socketConnected = true;
         this.reconnectAttempts = 0;
-        console.info("[DashboardStore] SSE connected");
+        console.info("[DashboardStore] realtime socket connected", { wsUrl });
       };
 
-      this.sse.addEventListener("child.moved", (e: MessageEvent) => {
-        this.lastEventId = e.lastEventId || this.lastEventId;
-        const payload = parseJsonSafely<Movement>(e.data);
-        if (payload) this.handleChildMoved(payload);
-      });
+      this.socket.onmessage = (e: MessageEvent<string>) => {
+        const envelope = parseJsonSafely<RealtimeEnvelope>(e.data);
+        if (!envelope) return;
 
-      this.sse.addEventListener("room.occupancy.updated", (e: MessageEvent) => {
-        this.lastEventId = e.lastEventId || this.lastEventId;
-        const payload = parseJsonSafely<OccupancyUpdatePayload>(e.data);
-        if (payload) this.handleOccupancyUpdate(payload);
-      });
+        switch (envelope.event) {
+          case "child.moved": {
+            const payload = envelope.data as Movement;
+            this.handleChildMoved(payload);
+            break;
+          }
+          case "room.occupancy.updated": {
+            const payload = envelope.data as OccupancyUpdatePayload;
+            this.handleOccupancyUpdate(payload);
+            break;
+          }
+          default:
+            break;
+        }
+      };
 
-      this.sse.addEventListener("room.alert.raised", (e: MessageEvent) => {
-        this.lastEventId = e.lastEventId || this.lastEventId;
-        const payload = parseJsonSafely<unknown>(e.data);
-        console.warn("[Dashboard ALERT]", payload);
-      });
+      this.socket.onerror = () => {
+        this.socketConnected = false;
+      };
 
-      this.sse.addEventListener("stream.draining", () => {
-        console.info("[DashboardStore] Server requested stream rotation");
-        this.disconnectSSE();
-        this.connectSSE();
-      });
-
-      this.sse.onerror = () => {
-        this.sseConnected = false;
-        this.reconnectAttempts += 1;
-        console.warn("[DashboardStore] SSE connection dropped; native retry in progress", {
-          reconnectAttempts: this.reconnectAttempts,
-        });
+      this.socket.onclose = () => {
+        this.socketConnected = false;
+        this.scheduleReconnect();
       };
     },
 
-    disconnectSSE() {
-      if (this.sse) this.sse.close();
-      this.sse = null;
-      this.sseConnected = false;
+    scheduleReconnect() {
+      this.reconnectAttempts += 1;
+      const delayMs = Math.min(1000 * 2 ** Math.min(this.reconnectAttempts, 5), 15000);
+
+      this.reconnectTimer = setTimeout(async () => {
+        await this.fetchAllDashboardData(true);
+        this.connectRealtime();
+      }, delayMs);
+    },
+
+    disconnectRealtime() {
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
+      if (this.socket) {
+        this.socket.onclose = null;
+        this.socket.close();
+      }
+
+      this.socket = null;
+      this.socketConnected = false;
     },
 
     handleChildMoved(movement: Movement) {

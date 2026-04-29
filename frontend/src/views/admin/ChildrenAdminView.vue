@@ -250,7 +250,7 @@ onMounted(() => {
 .meta-chip { padding: 6px 10px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-weight: 600; font-size: 0.85rem; }
 .toolbar { grid-template-columns: minmax(180px, 1fr) auto; }
 .card-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.card { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; }
+.card { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 @media (max-width: 820px) {
   .form-grid, .toolbar { grid-template-columns: 1fr; }
   .card { grid-template-columns: 1fr; align-items: start; }

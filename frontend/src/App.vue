@@ -1,9 +1,10 @@
 <template>
   <div id="app">
     <header class="header">
-      <h1>Lokato Plattform</h1>
-      <div class="clock">{{ time }}</div>
+      <h1>Lokato</h1>
     </header>
+
+    <img src="./views/images/hort_pregarten.svg" alt="Hort Pregarten" class="header-image" />
 
     <nav class="nav">
       <router-link
@@ -56,78 +57,125 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+
+
+
+h2 {
+  font-size: 36px;
+  font-family: Nunito, sans-serif;
+}
+
+
+h3 {
+  font-size: 24px;
+  font-family: Nunito, sans-serif;
+}
+
+
+
 .header {
+  height: 55px;
+  width: 100vw;
   position: relative;
-  background: #1e1e2f;
-  color: white;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  background: white;
+  color: black;
   padding: 25px 0;
-  margin-bottom: 30px;
+  box-sizing: border-box;
+  margin-bottom: 0;
   border-radius: 0 0 16px 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  position: relative;
 }
 
 .header h1 {
+  font-size: 30px;
+  font-family: Nunito, sans-serif;
   margin: 0;
-  font-size: 2rem;
   letter-spacing: 1px;
 }
 
-.clock {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-family: "Courier New", monospace;
-  font-size: 1rem;
-  opacity: 0.85;
+
+
+.header-image {
+  width: 100vw;
+  height: 281px;
+  display: block;
+  margin-left: -50vw;
+  position: relative;
+  left: 50%;
+  margin-top: -30px;
+  margin-bottom: 20px;
+  z-index: 1;
+  object-fit: cover;
 }
 
 .nav {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 15px;
   margin-bottom: 20px;
-  background: #f3f3f7;
-  padding: 8px;
-  border-radius: 40px;
-  width: fit-content;
-  margin-left: auto;
-  margin-right: auto;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  margin-top: 20px;
+  position: relative;
+  z-index: 5;
 }
 
 .nav-item {
-  flex: 1;
-  min-width: 120px;
-  text-align: center;
-  padding: 10px 18px;
-  border-radius: 30px;
-  font-weight: 600;
+  height: 69px;
+  width: 282px;
+  padding: 10px 24px;
+  border-radius: 15px;
+  box-sizing: border-box;
+  align-content: center;
+  font-size: 26px;
+  font-weight: 500;
   text-decoration: none;
   color: #333;
-  background: transparent;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.25s ease;
 }
 
+.nav-item:nth-child(1) {
+  background: #D9D9D9;
+}
+
+.nav-item:nth-child(2) {
+  background: #2A7CD9;
+  color: white;
+}
+
 .nav-item:hover {
-  background: rgba(0, 0, 0, 0.08);
+  opacity: 0.9;
 }
 
 .nav-item.active {
-  background: #3d5afe;
-  color: white;
-  box-shadow: 0 3px 8px rgba(61, 90, 254, 0.4);
+  opacity: 1;
 }
 
 hr {
-  margin: 25px 0;
+  margin: 10px 0;
   opacity: 0.4;
 }
 
 #app {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: auto;
-  font-family: sans-serif;
+  font-family: Nunito, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   text-align: center;
+  background-color: #EDEDED;
+  min-height: 100vh;
+}
+
+:global(html),
+:global(body) {
+  overflow-x: hidden;
 }
 </style>

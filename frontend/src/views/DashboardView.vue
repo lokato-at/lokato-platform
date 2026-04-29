@@ -244,7 +244,7 @@ onUnmounted(() => {
 .connection { border-radius: 999px; padding: 8px 12px; background: #fff4cc; color: #7a5c00; font-weight: 600; }
 .connection.online { background: #dcfce7; color: #166534; }
 .metrics { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
-.metric-card { border: 1px solid #e6edf3; border-radius: 12px; padding: 11px; background: #fff; }
+.metric-card { border: 1px solid #e6edf3; border-radius: 12px; padding: 11px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 .metric-label { margin: 0; color: #64748b; font-size: 0.83rem; }
 .metric-value { margin: 4px 0 0; font-size: 1.2rem; font-weight: 700; }
 .toolbar { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(180px, 1fr)); }

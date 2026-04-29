@@ -226,7 +226,7 @@ onMounted(async () => {
 .groups { display: grid; gap: 12px; }
 .group-header { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
 .device-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.device-card { border: 1px solid #edf2f7; border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+.device-card { border: 1px solid #edf2f7; border-radius: 10px; padding: 10px; display: grid; gap: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 .device-name { margin: 0; font-weight: 600; }
 .device-meta { margin: 0; color: #64748b; font-size: 0.86rem; }
 .primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }

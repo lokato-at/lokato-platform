@@ -246,7 +246,7 @@ onMounted(async () => {
 
 .toolbar { grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(160px, 220px)); }
 .device-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.device-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; }
+.device-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 .badges { display: grid; gap: 6px; justify-items: end; }
 @media (max-width: 960px) {
   .form-grid, .toolbar { grid-template-columns: 1fr; }

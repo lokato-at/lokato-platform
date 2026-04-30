@@ -3,173 +3,68 @@
 namespace App\Console\Commands;
 
 use App\Services\ScanIngestService;
+use App\Support\AppLogger;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 use PhpMqtt\Client\Facades\MQTT;
 use Throwable;
 
 class MqttSubscribeCommand extends Command
 {
-    protected $signature = 'mqtt:subscribe {--once} {--debug}';
+    protected $signature = 'mqtt:subscribe {--once}';
     protected $description = 'Subscribe to scan topic and ingest scans safely.';
 
     public function handle(ScanIngestService $scanIngestService): int
     {
         $topic = (string) env('MQTT_TOPIC_SCAN', '/api/v1/scan');
         $qos = (int) env('MQTT_QOS', 0);
-
-        // Safety limit: drop oversized payloads
-        $maxPayloadBytes = (int) env('MQTT_MAX_PAYLOAD_BYTES', 4096);
-
-        // Optional: eindeutige Client-ID pro Prozess (wichtig wenn mehrere Listener parallel laufen)
-        // Zur Laufzeit überschreiben, bevor connection() gebaut wird:
+        $latWarn = (int) env('MQTT_LATENCY_WARN_MS', 3000);
         $baseClientId = (string) (env('MQTT_CLIENT_ID') ?: 'lokato-laravel-subscriber');
-        config(['mqtt-client.connections.default.client_id' => $baseClientId . '-' . getmypid()]);
+        config(['mqtt-client.connections.default.client_id' => $baseClientId]);
 
-        $this->warn('MQTT CONFIG: ' . json_encode([
-                'host' => config('mqtt-client.connections.default.host'),
-                'port' => config('mqtt-client.connections.default.port'),
-                'client_id' => config('mqtt-client.connections.default.client_id'),
-                'topic' => $topic,
-                'qos' => $qos,
-                'max_payload_bytes' => $maxPayloadBytes,
-            ], JSON_UNESCAPED_SLASHES));
+        AppLogger::event('mqtt', 'mqtt_subscriber_starting', ['topic'=>$topic,'qos'=>$qos,'client_id'=>$baseClientId], 'info', true);
 
-        /** @var \PhpMqtt\Client\Contracts\MqttClient $mqtt */
-        $mqtt = MQTT::connection(); // nutzt default_connection aus config/mqtt-client.php
-
-        $self = $this;
-
-        $self->info("Subscribing to {$topic} (QoS {$qos}) ...");
-
-        $processedOne = false;
-
-        $mqtt->subscribe($topic, function (string $incomingTopic, string $message) use (
-            $scanIngestService,
-            $self,
-            $maxPayloadBytes,
-            &$processedOne,
-            $mqtt
-        ) {
-            $len = strlen($message);
-
-            if ($self->option('debug')) {
-                $self->line("MQTT RECEIVED {$incomingTopic} (len={$len}): {$message}");
-            }
-
-            // 1) size checks
-            if ($len === 0) {
-                Log::channel('scan')->warning('Ignoring empty MQTT message', ['topic' => $incomingTopic]);
-                return;
-            }
-            if ($len > $maxPayloadBytes) {
-                Log::channel('scan')->warning('Ignoring oversized MQTT message', [
-                    'topic' => $incomingTopic,
-                    'len' => $len,
-                    'max' => $maxPayloadBytes,
-                ]);
-                return;
-            }
-
-            // 2) strict JSON
+        $mqtt = MQTT::connection();
+        $mqtt->subscribe($topic, function (string $incomingTopic, string $message) use ($scanIngestService, $mqtt, $latWarn) {
+            $mqttReceivedAt = now();
             try {
                 $payload = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
-                if (!is_array($payload)) {
-                    Log::channel('scan')->warning('MQTT payload is not a JSON object', [
+                $scannerSentAt = isset($payload['event_time']) ? Carbon::parse((string) $payload['event_time']) : null;
+                $deliveryLatency = $scannerSentAt ? $mqttReceivedAt->diffInMilliseconds($scannerSentAt, false) * -1 : null;
+
+                if ($deliveryLatency !== null && $deliveryLatency > $latWarn) {
+                    AppLogger::event('mqtt', 'mqtt_latency_warning', [
+                        'mqtt_delivery_latency_ms' => $deliveryLatency,
                         'topic' => $incomingTopic,
-                        'type' => gettype($payload),
-                    ]);
-                    return;
+                        'scanner_sent_at' => $scannerSentAt?->toIso8601String(),
+                        'mqtt_received_at' => $mqttReceivedAt->toIso8601String(),
+                    ], 'warning');
                 }
-            } catch (\JsonException $e) {
-                Log::channel('scan')->warning('MQTT scan message is not valid JSON', [
-                    'topic' => $incomingTopic,
-                    'len' => $len,
-                    'error' => $e->getMessage(),
-                    // nicht das ganze message loggen (außer debug)
-                    'sample' => $self->option('debug') ? $message : substr($message, 0, 120),
-                ]);
-                return;
-            }
 
-            // 3) extract + validate
-            $deviceKey  = isset($payload['device_key']) ? (string) $payload['device_key'] : '';
-            $trackerUid = isset($payload['tracker_uid']) ? (string) $payload['tracker_uid'] : '';
-            $eventTimeRaw = isset($payload['event_time']) ? (string) $payload['event_time'] : null;
-
-            if (!$this->isValidId($deviceKey, 1, 64) || !$this->isValidId($trackerUid, 1, 64)) {
-                Log::channel('scan')->warning('MQTT scan payload failed validation', [
-                    'topic' => $incomingTopic,
-                    'device_key_present' => $deviceKey !== '',
-                    'tracker_uid_present' => $trackerUid !== '',
-                ]);
-                return;
-            }
-
-            // event_time: nur übernehmen wenn parsebar
-            $eventTimeIso = null;
-            if ($eventTimeRaw !== null && $eventTimeRaw !== '') {
-                try {
-                    $eventTimeIso = Carbon::parse($eventTimeRaw)->toIso8601String();
-                } catch (Throwable $e) {
-                    Log::channel('scan')->notice('Invalid event_time; using now()', [
-                        'topic' => $incomingTopic,
-                        'event_time' => $eventTimeRaw,
-                    ]);
-                }
-            }
-
-            // 4) ingest -> DB
-            try {
+                $processingStart = microtime(true);
                 $movement = $scanIngestService->ingestScan(
-                    deviceKey: $deviceKey,
-                    trackerUid: $trackerUid,
-                    eventTimeIso: $eventTimeIso,
+                    deviceKey: (string) ($payload['device_key'] ?? ''),
+                    trackerUid: (string) ($payload['tracker_uid'] ?? ''),
+                    eventTimeIso: $scannerSentAt?->toIso8601String(),
                     source: 'mqtt_scanner'
                 );
 
-                if ($movement) {
-                    Log::channel('scan')->info('MQTT scan ingested', [
-                        'movement_id' => $movement->id,
-                        'device_key' => $deviceKey,
-                        'tracker_uid' => $trackerUid,
-                        'event_time' => $eventTimeIso,
-                    ]);
-
-                    $processedOne = true;
-
-                    if ($self->option('once')) {
-                        $mqtt->interrupt(); // beendet loop in der nächsten Iteration
-                    }
-                } else {
-                    // ingestScan loggt unknown device/tracker schon selbst
-                    Log::channel('scan')->notice('MQTT scan ignored (unknown device or child)', [
-                        'device_key' => $deviceKey,
-                        'tracker_uid' => $trackerUid,
-                    ]);
-                }
-
-            } catch (Throwable $e) {
-                Log::channel('scan')->error('Failed to ingest MQTT scan', [
+                AppLogger::event('mqtt', 'mqtt_message_processed', [
                     'topic' => $incomingTopic,
-                    'error' => $e->getMessage(),
-                ]);
+                    'processing_duration_ms' => (int) ((microtime(true)-$processingStart)*1000),
+                    'total_app_latency_ms' => (int) now()->diffInMilliseconds($mqttReceivedAt),
+                    'movement_id' => $movement?->id,
+                ], AppLogger::shouldLogDiagnostics('mqtt') ? 'info' : 'debug');
+
+                if ($this->option('once')) {
+                    $mqtt->interrupt();
+                }
+            } catch (Throwable $e) {
+                AppLogger::exception('mqtt', 'mqtt_message_failed', $e, ['topic' => $incomingTopic]);
             }
         }, $qos);
 
-        // Blockierend
         $mqtt->loop(true);
-
         return self::SUCCESS;
-    }
-
-    private function isValidId(string $value, int $min, int $max): bool
-    {
-        $len = strlen($value);
-        if ($len < $min || $len > $max) return false;
-
-        // erlaubt: A-Z a-z 0-9 _ -
-        return (bool) preg_match('/^[A-Za-z0-9_-]+$/', $value);
     }
 }

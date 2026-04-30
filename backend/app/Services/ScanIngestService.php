@@ -6,9 +6,9 @@ use App\Models\Child;
 use App\Models\ChildLocation;
 use App\Models\Device;
 use App\Models\MovementLog;
+use App\Support\AppLogger;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class ScanIngestService
 {
@@ -20,90 +20,46 @@ class ScanIngestService
         ?string $requestIp = null,
     ): ?MovementLog {
         return DB::transaction(function () use ($deviceKey, $trackerUid, $eventTimeIso, $source, $requestIp) {
-            $device = Device::query()
-                ->select(['id', 'device_key', 'room_id'])
-                ->where('device_key', $deviceKey)
-                ->first();
+            $dbStart = microtime(true);
+            $device = Device::query()->select(['id', 'device_key', 'room_id'])->where('device_key', $deviceKey)->first();
+            if (! $device) return null;
 
-            if (! $device) {
-                Log::channel('scan')->warning('Unknown device_key on scan', [
-                    'device_key' => $deviceKey,
-                    'tracker_uid' => $trackerUid,
-                    'ip' => $requestIp,
-                    'time' => now()->toIso8601String(),
-                ]);
+            $child = Child::query()->select(['id', 'tracker_uid', 'is_active'])->where('tracker_uid', $trackerUid)->lockForUpdate()->first();
+            if (! $child) return null;
 
-                return null;
-            }
-
-            $child = Child::query()
-                ->select(['id', 'tracker_uid'])
-                ->where('tracker_uid', $trackerUid)
-                ->first();
-
-            if (! $child) {
-                Log::channel('scan')->warning('Unknown tracker_uid on scan', [
-                    'device_key' => $device->device_key,
-                    'device_id' => $device->id,
-                    'tracker_uid' => $trackerUid,
-                    'ip' => $requestIp,
-                    'time' => now()->toIso8601String(),
-                ]);
-
-                return null;
-            }
-
-            $occurredAt = $eventTimeIso
-                ? Carbon::parse($eventTimeIso)
-                : now();
-
-            $currentLocation = ChildLocation::query()
-                ->select(['child_id', 'room_id', 'updated_at'])
-                ->where('child_id', $child->id)
-                ->lockForUpdate()
-                ->first();
-
+            $occurredAt = $eventTimeIso ? Carbon::parse($eventTimeIso) : now();
+            $currentLocation = ChildLocation::query()->select(['child_id', 'room_id', 'updated_at'])->where('child_id', $child->id)->lockForUpdate()->first();
             $fromRoomId = $currentLocation?->room_id;
             $toRoomId = $device->room_id;
 
             $movement = MovementLog::create([
-                'child_id' => $child->id,
-                'from_room_id' => $fromRoomId,
-                'to_room_id' => $toRoomId,
-                'device_id' => $device->id,
-                'source' => $source,
-                'occurred_at' => $occurredAt,
+                'child_id' => $child->id,'from_room_id' => $fromRoomId,'to_room_id' => $toRoomId,'device_id' => $device->id,'source' => $source,'occurred_at' => $occurredAt,
             ]);
 
             if ($currentLocation === null) {
-                ChildLocation::create([
-                    'child_id' => $child->id,
-                    'room_id' => $toRoomId,
-                    'updated_at' => $occurredAt,
-                ]);
+                ChildLocation::create(['child_id' => $child->id, 'room_id' => $toRoomId, 'updated_at' => $occurredAt]);
             } elseif ($occurredAt->gte($currentLocation->updated_at)) {
-                $currentLocation->forceFill([
-                    'room_id' => $toRoomId,
-                    'updated_at' => $occurredAt,
-                ])->save();
+                $currentLocation->forceFill(['room_id' => $toRoomId, 'updated_at' => $occurredAt])->save();
             }
 
-            Device::query()
-                ->whereKey($device->id)
-                ->update(['last_seen' => now()]);
+            $wasActive = (bool) $child->is_active;
+            if (!$wasActive) {
+                $child->is_active = true;
+                $child->save();
+            }
 
-            Log::channel('scan')->info('Scan processed', [
+            Device::query()->whereKey($device->id)->update(['last_seen' => now()]);
+
+            AppLogger::event('scan', 'scan_processed', [
                 'movement_id' => $movement->id,
-                'device_key' => $device->device_key,
                 'device_id' => $device->id,
                 'child_id' => $child->id,
-                'tracker_uid' => $child->tracker_uid,
-                'from_room_id' => $fromRoomId,
-                'to_room_id' => $toRoomId,
-                'occurred_at' => $occurredAt->toIso8601String(),
                 'source' => $source,
+                'is_active_before' => $wasActive,
+                'is_active_after' => true,
+                'db_duration_ms' => (int)((microtime(true)-$dbStart)*1000),
                 'ip' => $requestIp,
-            ]);
+            ], AppLogger::shouldLogDiagnostics('scan') ? 'info' : 'debug');
 
             return $movement;
         });

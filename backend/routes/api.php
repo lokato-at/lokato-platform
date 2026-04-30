@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DeviceEventController;
 use App\Http\Controllers\Api\MovementLogController;
 use App\Http\Controllers\Api\RoomsController;
 use App\Http\Controllers\Api\SseStreamController;
+use App\Http\Controllers\Api\DiagnosticsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -57,3 +58,10 @@ Route::prefix('stream')->group(function () {
     // Raum-spezifischer Stream (nur ein Raum, nur Occupancy + Alerts)
     Route::get('/room/{room}', [SseStreamController::class, 'room']);
 });
+
+
+Route::get('/health', [DiagnosticsController::class, 'health']);
+Route::get('/readiness', [DiagnosticsController::class, 'readiness']);
+if ((bool) env('DIAGNOSTICS_ENABLED', true)) {
+    Route::get('/diagnostics', [DiagnosticsController::class, 'readiness']);
+}

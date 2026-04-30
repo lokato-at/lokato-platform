@@ -6,7 +6,6 @@ use App\Models\AppRuntimeState;
 use App\Models\Child;
 use App\Support\AppLogger;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Schema;
 
 class DailyActiveResetCommand extends Command
 {
@@ -22,17 +21,15 @@ class DailyActiveResetCommand extends Command
 
         $affected = Child::query()->where('is_active', true)->update(['is_active' => false]);
 
-        if (Schema::hasTable('app_runtime_state')) {
-            AppRuntimeState::query()->updateOrCreate(
-                ['state_key' => 'last_daily_reset_date'],
-                ['state_value' => $resetDate]
-            );
+        AppRuntimeState::query()->updateOrCreate(
+            ['state_key' => 'last_daily_reset_date'],
+            ['state_value' => $resetDate]
+        );
 
-            AppRuntimeState::query()->updateOrCreate(
-                ['state_key' => 'last_daily_reset_at'],
-                ['state_value' => now()->toIso8601String()]
-            );
-        }
+        AppRuntimeState::query()->updateOrCreate(
+            ['state_key' => 'last_daily_reset_at'],
+            ['state_value' => now()->toIso8601String()]
+        );
 
         AppLogger::event('cron', 'daily_reset_finished', [
             'reset_date' => $resetDate,

@@ -87,6 +87,7 @@ h3 {
   box-sizing: border-box;
   margin-bottom: 0;
   border-radius: 0 0 16px 16px;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,8 +128,8 @@ h3 {
 }
 
 .nav-item {
-  height: 69px;
-  width: 282px;
+  height: 59px;
+  width: 262px;
   padding: 10px 24px;
   border-radius: 15px;
   box-sizing: border-box;
@@ -139,15 +140,12 @@ h3 {
   color: #333;
   border: 2px solid transparent;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0px 4px 4px 0px rgba(0, 0, 0, 0.25);
   transition: all 0.25s ease;
-}
-
-.nav-item:nth-child(1) {
   background: #D9D9D9;
 }
 
-.nav-item:nth-child(2) {
+.nav-item.active {
   background: #2A7CD9;
   color: white;
 }
@@ -156,9 +154,6 @@ h3 {
   opacity: 0.9;
 }
 
-.nav-item.active {
-  opacity: 1;
-}
 
 hr {
   margin: 10px 0;

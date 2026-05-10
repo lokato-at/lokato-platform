@@ -198,6 +198,16 @@ docker exec -it lokato-mosquitto mosquitto_sub -v -t "/api/v1/scan"
 
 ### MQTT Publish (Scan simulieren)
 
+Windows:
+```bash
+docker exec -it lokato-mosquitto mosquitto_pub 
+  -t "/api/v1/scan" 
+  -m '{\"device_key\":\"RaspberryChild02\",\"tracker_uid\":\"0X000017570D02640950B9462C\",\"event_time\":\"2026-01-26T12:00:00+00:00\"}' ey":"RaspberryChild02","tracker_uid":"0X000017570D02640950B9462C","event_time":"2026-01-26T12:00:00+00:00"}'
+```
+
+
+
+Linux:
 ```bash
 docker exec -it lokato-mosquitto mosquitto_pub \
   -t "/api/v1/scan" \

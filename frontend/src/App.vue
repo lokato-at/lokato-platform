@@ -1,12 +1,17 @@
 <template>
   <div id="app">
-    <header class="header">
+    <header v-if="!isTabletRoute" class="header">
       <h1>Lokato</h1>
     </header>
 
-    <img src="./views/images/hort_pregarten.svg" alt="Hort Pregarten" class="header-image" />
+    <img
+      v-if="!isTabletRoute"
+      src="./views/images/hort_pregarten.svg"
+      alt="Hort Pregarten"
+      class="header-image"
+    />
 
-    <nav class="nav">
+    <nav v-if="!isTabletRoute" class="nav">
       <router-link
         to="/dashboard"
         class="nav-item"
@@ -24,16 +29,17 @@
       </router-link>
     </nav>
 
-    <hr />
+    <hr v-if="!isTabletRoute" />
     <router-view />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 
 const route = useRoute();
+const isTabletRoute = computed(() => route.path.startsWith("/tablet"));
 const time = ref("");
 let intervalId: ReturnType<typeof setInterval> | null = null;
 

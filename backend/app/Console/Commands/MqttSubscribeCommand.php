@@ -11,7 +11,7 @@ use Throwable;
 
 class MqttSubscribeCommand extends Command
 {
-    protected $signature = 'mqtt:subscribe {--once} {--debug}';
+    protected $signature = 'mqtt:subscribe {--once}';
     protected $description = 'Subscribe to scan topic and ingest scans safely.';
 
     public function handle(ScanIngestService $scanIngestService): int
@@ -20,19 +20,13 @@ class MqttSubscribeCommand extends Command
         $qos = (int) env('MQTT_QOS', 0);
         $latWarn = (int) env('MQTT_LATENCY_WARN_MS', 3000);
         $baseClientId = (string) (env('MQTT_CLIENT_ID') ?: 'lokato-laravel-subscriber');
-        $clientId = $baseClientId.'-'.getmypid();
-        config(['mqtt-client.connections.default.client_id' => $clientId]);
+        config(['mqtt-client.connections.default.client_id' => $baseClientId]);
 
-        $this->info("MQTT subscribe starting: topic={$topic}, qos={$qos}, client_id={$clientId}");
-        AppLogger::event('mqtt', 'mqtt_subscriber_starting', ['topic' => $topic, 'qos' => $qos, 'client_id' => $clientId], 'info', true);
+        AppLogger::event('mqtt', 'mqtt_subscriber_starting', ['topic' => $topic, 'qos' => $qos, 'client_id' => $baseClientId], 'info', true);
 
         $mqtt = MQTT::connection();
         $mqtt->subscribe($topic, function (string $incomingTopic, string $message) use ($scanIngestService, $mqtt, $latWarn) {
             $mqttReceivedAt = now();
-
-            if ($this->option('debug')) {
-                $this->line("MQTT message received on {$incomingTopic}: ".substr($message, 0, 200));
-            }
 
             try {
                 $payload = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
@@ -87,13 +81,9 @@ class MqttSubscribeCommand extends Command
                 }
             } catch (Throwable $e) {
                 AppLogger::exception('mqtt', 'mqtt_message_failed', $e, ['topic' => $incomingTopic]);
-                if ($this->option('debug')) {
-                    $this->error('MQTT message failed: '.$e->getMessage());
-                }
             }
         }, $qos);
 
-        $this->info('MQTT loop started. Waiting for messages...');
         $mqtt->loop(true);
         return self::SUCCESS;
     }

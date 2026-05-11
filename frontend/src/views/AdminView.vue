@@ -110,7 +110,7 @@ h3.desc {
   background: #f8f8f8;
   border-radius: 5px;
   border: 1px solid #ddd;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -167,7 +167,7 @@ h3.desc {
   font-weight: 550;
   font-family: Nunito, sans-serif;
   transition: 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
 }
 
 .card-btn:hover {

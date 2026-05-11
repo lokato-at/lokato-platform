@@ -3,7 +3,7 @@ import { apiBaseUrl } from "@/utils/api";
 
 const api = axios.create({
   baseURL: apiBaseUrl,
-  timeout: 10000,
+  timeout: 180000,
   headers: {
     Accept: "application/json",
   },

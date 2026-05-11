@@ -14,7 +14,7 @@ class MqttSubscribeCommand extends Command
     protected $signature = 'mqtt:subscribe {--once}';
     protected $description = 'Subscribe to scan topic and ingest scans safely.';
 
-    public function handle(ScanIngestService $scanIngestService): int
+    public function handle(): int
     {
         $topic = (string) env('MQTT_TOPIC_SCAN', '/api/v1/scan');
         $normalizedTopic = '/'.ltrim($topic, '/');

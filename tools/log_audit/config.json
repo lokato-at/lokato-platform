@@ -1,0 +1,15 @@
+{
+  "log_files": [
+    "backend/storage/logs/laravel.log",
+    "backend/storage/logs/scan.log",
+    "backend/storage/logs/sse.log"
+  ],
+  "retention_days": 14,
+  "latency_warn_ms": 3000,
+  "patterns": {
+    "scan_events": ["scan_processed", "MQTT scan ingested", "movement_id"],
+    "warnings": ["warning", "mqtt_latency_warning", "ignored"],
+    "errors": ["error", "exception", "failed", "SQLSTATE"],
+    "daily_reset": ["daily_reset_finished", "children:daily-active-reset"]
+  }
+}

@@ -26,8 +26,6 @@ class MqttSubscribeCommand extends Command
         $port = (int) env('MQTT_PORT', 1883);
         $debugLogs = filter_var(env('MQTT_SUBSCRIBE_DEBUG', false), FILTER_VALIDATE_BOOL);
 
-        $this->info('MQTT subscribe command started');
-
         if ($topic !== $normalizedTopic) {
             AppLogger::event('mqtt', 'mqtt_topic_normalized', [
                 'configured_topic' => $topic,
@@ -36,16 +34,6 @@ class MqttSubscribeCommand extends Command
         }
 
         config(['mqtt-client.connections.default.client_id' => $baseClientId]);
-
-
-        try {
-            /** @var ScanIngestService $scanIngestService */
-            $scanIngestService = app(ScanIngestService::class);
-        } catch (Throwable $e) {
-            $this->error('Failed to resolve ScanIngestService.');
-            AppLogger::exception('mqtt', 'mqtt_scan_ingest_service_resolve_failed', $e, []);
-            return self::FAILURE;
-        }
 
         AppLogger::event('mqtt', 'mqtt_subscribe_command_started', [
             'topic' => $normalizedTopic,
@@ -60,7 +48,6 @@ class MqttSubscribeCommand extends Command
 
         try {
             $mqtt = MQTT::connection();
-$this->info('MQTT connection initialized');
             AppLogger::event('mqtt', 'mqtt_connection_initialized', [
                 'topic' => $normalizedTopic,
                 'host' => $host,
@@ -81,7 +68,6 @@ $this->info('MQTT connection initialized');
         $messageHandler = function (string $incomingTopic, string $message) use ($scanIngestService, $mqtt, $latWarn, $debugLogs) {
             $mqttReceivedAt = now();
 
-$this->line('MQTT message received on topic: '.$incomingTopic);
             AppLogger::event('mqtt', 'mqtt_message_received', [
                 'topic' => $incomingTopic,
                 'received_at' => $mqttReceivedAt->toIso8601String(),
@@ -188,8 +174,7 @@ $this->line('MQTT message received on topic: '.$incomingTopic);
         };
 
         try {
-$mqtt->subscribe($normalizedTopic, $messageHandler, $qos);
-            $this->info('Subscribed to topic: '.$normalizedTopic.' (QoS '.$qos.')');
+            $mqtt->subscribe($normalizedTopic, $messageHandler, $qos);
             AppLogger::event('mqtt', 'mqtt_subscribed', [
                 'topic' => $normalizedTopic,
                 'qos' => $qos,

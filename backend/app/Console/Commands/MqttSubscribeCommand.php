@@ -22,21 +22,40 @@ class MqttSubscribeCommand extends Command
         $baseClientId = (string) (env('MQTT_CLIENT_ID') ?: 'lokato-laravel-subscriber');
         config(['mqtt-client.connections.default.client_id' => $baseClientId]);
 
-        AppLogger::event('mqtt', 'mqtt_subscriber_starting', ['topic'=>$topic,'qos'=>$qos,'client_id'=>$baseClientId], 'info', true);
+        AppLogger::event('mqtt', 'mqtt_subscriber_starting', ['topic' => $topic, 'qos' => $qos, 'client_id' => $baseClientId], 'info', true);
 
         $mqtt = MQTT::connection();
         $mqtt->subscribe($topic, function (string $incomingTopic, string $message) use ($scanIngestService, $mqtt, $latWarn) {
             $mqttReceivedAt = now();
+
             try {
                 $payload = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
-                $scannerSentAt = isset($payload['event_time']) ? Carbon::parse((string) $payload['event_time']) : null;
-                $deliveryLatency = $scannerSentAt ? $mqttReceivedAt->diffInMilliseconds($scannerSentAt, false) * -1 : null;
+                if (!is_array($payload)) {
+                    AppLogger::event('mqtt', 'mqtt_message_ignored', ['reason' => 'payload_not_object', 'topic' => $incomingTopic], 'warning');
+                    return;
+                }
 
+                $eventTimeIso = null;
+                $scannerSentAt = null;
+                $eventTimeRaw = isset($payload['event_time']) ? (string) $payload['event_time'] : null;
+                if ($eventTimeRaw !== null && $eventTimeRaw !== '') {
+                    try {
+                        $scannerSentAt = Carbon::parse($eventTimeRaw);
+                        $eventTimeIso = $scannerSentAt->toIso8601String();
+                    } catch (Throwable) {
+                        AppLogger::event('mqtt', 'mqtt_event_time_invalid', [
+                            'topic' => $incomingTopic,
+                            'event_time' => $eventTimeRaw,
+                        ], 'notice');
+                    }
+                }
+
+                $deliveryLatency = $scannerSentAt ? $mqttReceivedAt->diffInMilliseconds($scannerSentAt, false) * -1 : null;
                 if ($deliveryLatency !== null && $deliveryLatency > $latWarn) {
                     AppLogger::event('mqtt', 'mqtt_latency_warning', [
                         'mqtt_delivery_latency_ms' => $deliveryLatency,
                         'topic' => $incomingTopic,
-                        'scanner_sent_at' => $scannerSentAt?->toIso8601String(),
+                        'scanner_sent_at' => $eventTimeIso,
                         'mqtt_received_at' => $mqttReceivedAt->toIso8601String(),
                     ], 'warning');
                 }
@@ -45,15 +64,16 @@ class MqttSubscribeCommand extends Command
                 $movement = $scanIngestService->ingestScan(
                     deviceKey: (string) ($payload['device_key'] ?? ''),
                     trackerUid: (string) ($payload['tracker_uid'] ?? ''),
-                    eventTimeIso: $scannerSentAt?->toIso8601String(),
+                    eventTimeIso: $eventTimeIso,
                     source: 'mqtt_scanner'
                 );
 
                 AppLogger::event('mqtt', 'mqtt_message_processed', [
                     'topic' => $incomingTopic,
-                    'processing_duration_ms' => (int) ((microtime(true)-$processingStart)*1000),
+                    'processing_duration_ms' => (int) ((microtime(true) - $processingStart) * 1000),
                     'total_app_latency_ms' => (int) now()->diffInMilliseconds($mqttReceivedAt),
                     'movement_id' => $movement?->id,
+                    'event_time' => $eventTimeIso,
                 ], AppLogger::shouldLogDiagnostics('mqtt') ? 'info' : 'debug');
 
                 if ($this->option('once')) {

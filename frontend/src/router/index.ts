@@ -6,6 +6,7 @@ const ChildrenAdminView = () => import("../views/admin/ChildrenAdminView.vue");
 const RoomsAdminView = () => import("../views/admin/RoomsAdminView.vue");
 const DevicesAdminView = () => import("../views/admin/DevicesAdminView.vue");
 const MovementAdminView = () => import("../views/admin/MovementAdminView.vue");
+const RoomTabletView = () => import("../views/tablet/RoomTabletView.vue");
 
 const routes = [
   { path: "/", redirect: "/dashboard" },
@@ -13,6 +14,11 @@ const routes = [
     path: "/dashboard",
     name: "Dashboard",
     component: DashboardView,
+  },
+  {
+    path: "/tablet/:roomId",
+    name: "RoomTablet",
+    component: RoomTabletView,
   },
   {
     path: "/admin/home",

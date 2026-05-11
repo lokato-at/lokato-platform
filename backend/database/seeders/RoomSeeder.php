@@ -11,10 +11,10 @@ class RoomSeeder extends Seeder
     {
         Room::insert([
             [
-                'name'      => 'Bastelraum',
-                'area'      => 'UG',
-                'capacity'  => 15,
-                'tolerance' => 2,
+                'name'      => 'Kreativraum',
+                'area'      => 'EG',
+                'capacity'  => 7,
+                'tolerance' => 3,
                 'is_active' => true,
             ],
             [
@@ -27,10 +27,54 @@ class RoomSeeder extends Seeder
             [
                 'name'      => 'Garten',
                 'area'      => 'Außenbereich',
-                'capacity'  => 30,
+                'capacity'  => 20,
                 'tolerance' => 5,
                 'is_active' => true,
             ],
+
+            [
+                'name'      => 'Speiseraum',
+                'area'      => 'EG',
+                'capacity'  => 7,
+                'tolerance' => 5,
+                'is_active' => true,
+            ],
+
+
+            [
+                'name'      => 'Bauraum',
+                'area'      => 'EG',
+                'capacity'  => 7,
+                'tolerance' => 3,
+                'is_active' => true,
+            ],
+
+            [
+                'name'      => 'Spiele-/Ruheraum',
+                'area'      => 'EG',
+                'capacity'  => 7,
+                'tolerance' => 3,
+                'is_active' => true,
+            ],
+
+            [
+                'name'      => 'Hausübungsraum',
+                'area'      => 'UG',
+                'capacity'  => 20,
+                'tolerance' => 5,
+                'is_active' => true,
+            ],
+
+            [
+                'name'      => 'Bewegungsraum',
+                'area'      => 'UG',
+                'capacity'  => 7,
+                'tolerance' => 3,
+                'is_active' => true,
+            ],
+
+
+
         ]);
     }
 }

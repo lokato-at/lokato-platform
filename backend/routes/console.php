@@ -7,6 +7,4 @@ Artisan::command('inspire', function () {
     $this->comment('Keep shipping stable software.');
 });
 
-Schedule::command('children:daily-active-reset')
-    ->timezone(env('APP_TIMEZONE', 'Europe/Vienna'))
-    ->dailyAt('01:00');
+Schedule::command('children:daily-active-reset')->timezone(env('APP_TIMEZONE', 'Europe/Vienna'))->dailyAt('01:00');

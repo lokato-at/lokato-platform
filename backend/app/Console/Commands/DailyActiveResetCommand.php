@@ -6,11 +6,10 @@ use App\Models\AppRuntimeState;
 use App\Models\Child;
 use App\Support\AppLogger;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Schema;
 
 class DailyActiveResetCommand extends Command
 {
-    protected $signature = 'children:daily-active-reset';
+    protected $signature = 'children:daily-active-reset {--recovery}';
     protected $description = 'Setzt alle children.is_active auf 0 und speichert den täglichen Reset-Status.';
 
     public function handle(): int
@@ -22,22 +21,21 @@ class DailyActiveResetCommand extends Command
 
         $affected = Child::query()->where('is_active', true)->update(['is_active' => false]);
 
-        if (Schema::hasTable('app_runtime_state')) {
-            AppRuntimeState::query()->updateOrCreate(
-                ['state_key' => 'last_daily_reset_date'],
-                ['state_value' => $resetDate]
-            );
+        AppRuntimeState::query()->updateOrCreate(
+            ['state_key' => 'last_daily_reset_date'],
+            ['state_value' => $resetDate]
+        );
 
-            AppRuntimeState::query()->updateOrCreate(
-                ['state_key' => 'last_daily_reset_at'],
-                ['state_value' => now()->toIso8601String()]
-            );
-        }
+        AppRuntimeState::query()->updateOrCreate(
+            ['state_key' => 'last_daily_reset_at'],
+            ['state_value' => now()->toIso8601String()]
+        );
 
         AppLogger::event('cron', 'daily_reset_finished', [
             'reset_date' => $resetDate,
             'affected_children_count' => $affected,
             'duration_ms' => (int) ((microtime(true) - $start) * 1000),
+            'recovery_mode' => (bool) $this->option('recovery'),
         ], 'info');
 
         return self::SUCCESS;

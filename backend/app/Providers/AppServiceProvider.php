@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\AppRuntimeState;
 use App\Support\AppLogger;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -15,6 +17,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->validateEnv();
+        $this->runDailyResetRecoveryIfNeeded();
 
         AppLogger::event('app', 'startup', [
             'timezone' => config('app.timezone'),
@@ -38,6 +41,20 @@ class AppServiceProvider extends ServiceProvider
         if ($missing !== []) {
             AppLogger::event('config', 'env_validation_failed', ['missing' => $missing], 'critical', true);
             throw new \RuntimeException('Missing required env: '.implode(', ', $missing));
+        }
+    }
+
+    private function runDailyResetRecoveryIfNeeded(): void
+    {
+        $today = now(config('app.timezone'))->toDateString();
+        $lastResetDate = AppRuntimeState::query()->where('state_key', 'last_daily_reset_date')->value('state_value');
+
+        if ($lastResetDate !== $today) {
+            AppLogger::event('cron', 'daily_reset_recovery', [
+                'daily_reset_missed' => true,
+                'reset_date' => $today,
+            ], 'warning', true);
+            Artisan::call('children:daily-active-reset', ['--recovery' => true]);
         }
     }
 }

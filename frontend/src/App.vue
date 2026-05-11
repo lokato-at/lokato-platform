@@ -1,12 +1,17 @@
 <template>
   <div id="app">
-    <header class="header">
+    <header v-if="!isTabletRoute" class="header">
       <h1>Lokato</h1>
     </header>
 
-    <img src="./views/images/hort_pregarten.svg" alt="Hort Pregarten" class="header-image" />
+    <img
+      v-if="!isTabletRoute"
+      src="./views/images/hort_pregarten.svg"
+      alt="Hort Pregarten"
+      class="header-image"
+    />
 
-    <nav class="nav">
+    <nav v-if="!isTabletRoute" class="nav">
       <router-link
         to="/dashboard"
         class="nav-item"
@@ -24,16 +29,17 @@
       </router-link>
     </nav>
 
-    <hr />
+    <hr v-if="!isTabletRoute" />
     <router-view />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 
 const route = useRoute();
+const isTabletRoute = computed(() => route.path.startsWith("/tablet"));
 const time = ref("");
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -87,6 +93,7 @@ h3 {
   box-sizing: border-box;
   margin-bottom: 0;
   border-radius: 0 0 16px 16px;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,8 +134,8 @@ h3 {
 }
 
 .nav-item {
-  height: 69px;
-  width: 282px;
+  height: 59px;
+  width: 262px;
   padding: 10px 24px;
   border-radius: 15px;
   box-sizing: border-box;
@@ -139,15 +146,12 @@ h3 {
   color: #333;
   border: 2px solid transparent;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0px 4px 4px 0px rgba(0, 0, 0, 0.25);
   transition: all 0.25s ease;
-}
-
-.nav-item:nth-child(1) {
   background: #D9D9D9;
 }
 
-.nav-item:nth-child(2) {
+.nav-item.active {
   background: #2A7CD9;
   color: white;
 }
@@ -156,9 +160,6 @@ h3 {
   opacity: 0.9;
 }
 
-.nav-item.active {
-  opacity: 1;
-}
 
 hr {
   margin: 10px 0;

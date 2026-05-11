@@ -3,7 +3,8 @@
 ## Start
 - MySQL/Mosquitto in Docker starten: `docker compose -f docker/docker-compose.yml up -d`
 - Backend lokal starten.
-- Daily Reset manuell ausführen bei Bedarf: `php artisan children:daily-active-reset`.
+- Laravel Scheduler laufen lassen, damit der Daily Reset um 01:00 ausgeführt wird: `php artisan schedule:work`.
+- Alternativ per System-Cron minütlich: `* * * * * cd /workspace/lokato-platform/backend && php artisan schedule:run >> /dev/null 2>&1`
 
 ## Log Profile
 Normal:

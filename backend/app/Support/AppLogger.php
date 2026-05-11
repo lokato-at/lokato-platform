@@ -12,6 +12,12 @@ class AppLogger
         return filter_var(env('LOG_ENABLED', true), FILTER_VALIDATE_BOOL);
     }
 
+    public static function format(): string
+    {
+        $format = strtolower((string) env('LOG_FORMAT', 'pretty'));
+        return in_array($format, ['pretty', 'json'], true) ? $format : 'pretty';
+    }
+
     public static function shouldLogDiagnostics(string $type): bool
     {
         return match ($type) {
@@ -34,6 +40,11 @@ class AppLogger
             'event' => $event,
             'timestamp' => now()->toIso8601String(),
         ], self::sanitize($context));
+
+        if (self::format() === 'json') {
+            Log::log($level, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            return;
+        }
 
         Log::log($level, $event, $payload);
     }

@@ -1,5 +1,8 @@
 <?php
 
+use App\Console\Commands\DailyActiveResetCommand;
+use App\Console\Commands\MqttScanListener;
+use App\Console\Commands\MqttSubscribeCommand;
 use App\Http\Middleware\ApiPerformanceMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -12,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        DailyActiveResetCommand::class,
+        MqttSubscribeCommand::class,
+        MqttScanListener::class,
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(append: [
             ApiPerformanceMiddleware::class,

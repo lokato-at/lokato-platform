@@ -37,7 +37,7 @@ Das Backend basiert auf **Laravel 11/12** und stellt eine vollständige REST-API
 
 ### 🔹 Logging
 
-Eigener Log-Channel für Scanner:
+Eigener Log-Channel für Scanner- und MQTT-Scan-Logs:
 
 ```
 storage/logs/scan.log
@@ -215,7 +215,7 @@ photo: file
 
 ## Custom-Scanner-Log
 
-Ein eigener Channel speichert alle Scan-Events (Erfolg + Fehler):
+Ein eigener Channel speichert alle Scan-Events inkl. MQTT-Scan-Diagnostik (Erfolg + Fehler):
 
 `config/logging.php`:
 

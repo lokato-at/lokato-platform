@@ -7,6 +7,11 @@ use Throwable;
 
 class AppLogger
 {
+    private const CHANNEL_BY_COMPONENT = [
+        'mqtt' => 'scan',
+        'scan' => 'scan',
+    ];
+
     public static function enabled(): bool
     {
         return filter_var(env('LOG_ENABLED', true), FILTER_VALIDATE_BOOL);
@@ -41,12 +46,14 @@ class AppLogger
             'timestamp' => now()->toIso8601String(),
         ], self::sanitize($context));
 
+        $channel = self::channelFor($component);
+
         if (self::format() === 'json') {
-            Log::log($level, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            Log::channel($channel)->log($level, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             return;
         }
 
-        Log::log($level, $event, $payload);
+        Log::channel($channel)->log($level, $event, $payload);
     }
 
     public static function exception(string $component, string $event, Throwable $e, array $context = []): void
@@ -62,5 +69,10 @@ class AppLogger
     {
         unset($context['password'], $context['secret'], $context['token']);
         return $context;
+    }
+
+    private static function channelFor(string $component): string
+    {
+        return self::CHANNEL_BY_COMPONENT[$component] ?? config('logging.default', 'stack');
     }
 }

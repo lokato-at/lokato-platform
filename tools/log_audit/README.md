@@ -17,6 +17,7 @@ python3 log_audit.py cleanup --config config.json
 ## Anpassung
 - Dateipfade, Retention und Muster in `config.json` ändern.
 - Das Tool ist absichtlich flexibel: wenn ein Log-Format anders ist, nur Patterns anpassen.
+- Standardmäßig werden `backend/storage/logs/scan.log` (MQTT-/Scan-Diagnostik) und `backend/storage/logs/laravel.log` (allgemeine App-Logs) ausgewertet.
 
 ## Täglicher Lauf (cron)
 ```bash

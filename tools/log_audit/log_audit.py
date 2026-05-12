@@ -21,7 +21,12 @@ DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 DURATION_RE = re.compile(r"(?:duration_ms|processing_duration_ms|db_duration_ms)\D+(\d+)")
 
 DEFAULT_PATTERNS = {
-    "scan_events": [r"scan_processed", r"MQTT scan ingested", r"movement_id"],
+    "scan_events": [
+        r"mqtt_message_processed",
+        r"scan_processed",
+        r"MQTT scan ingested",
+        r"movement_id",
+    ],
     "warnings": [r"\bwarning\b", r"mqtt_latency_warning", r"ignored"],
     "errors": [r"\berror\b", r"exception", r"failed", r"SQLSTATE"],
     "daily_reset": [r"daily_reset_finished", r"children:daily-active-reset"],

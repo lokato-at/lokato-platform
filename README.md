@@ -229,7 +229,7 @@ Im Ordner `backend/storage/logs`:
 
 * `scan.log`
 
-  * Alle verarbeiteten Scan-Events (MQTT)
+  * Alle verarbeiteten Scan-Events inkl. MQTT-Subscriber-Diagnostik
 
 * `sse.log`
 
@@ -237,7 +237,7 @@ Im Ordner `backend/storage/logs`:
 
 * `laravel.log`
 
-  * Allgemeine Backend-Logs
+  * Allgemeine Backend-Logs (ohne MQTT-Scan-Diagnostik)
 
 Diese Logs sind die **erste Anlaufstelle bei Problemen**.
 
@@ -341,4 +341,3 @@ VITE_API_BASE_URL=http://localhost:8001/api/v1
 ### `docker/docker-compose.yml`
 
 Für die Performance-Änderungen selbst ist **keine zwingende Änderung** an `docker/docker-compose.yml` erforderlich. Die neuen REST-/SSE-Optimierungen laufen auf Anwendungsebene. Falls du später Production-Hardening willst, wären eher Themen wie nicht veröffentlichte DB-Ports, Healthchecks und Reverse-Proxy/Process-Manager relevant – aber nicht zwingend wegen dieses Updates.
-

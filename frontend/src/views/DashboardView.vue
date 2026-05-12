@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useDashboardDataStore } from '@/stores/dashboardDataStore'
 import type { Child, Movement, OccupancySnapshot, Room } from '@/stores/dashboardDataStore'
 
 const store = useDashboardDataStore()
 const childSearch = ref('')
+const selectedRoomId = ref<number | null>(null)
+const checkoutInProgress = reactive(new Set<number>())
 
 const normalizedChildSearch = computed(() => childSearch.value.trim().toLowerCase())
 
@@ -79,6 +81,16 @@ const roomCards = computed<RoomCard[]>(() => {
     .sort((a, b) => a.room.name.localeCompare(b.room.name, 'de'))
 })
 
+const selectedRoomCard = computed<RoomCard | null>(() => {
+  if (selectedRoomId.value == null) return null
+  return roomCards.value.find((card) => card.room.id === selectedRoomId.value) ?? null
+})
+
+const selectedRoomChildren = computed<Child[]>(() => {
+  const children = selectedRoomCard.value?.snapshot.children ?? []
+  return children.filter((child) => isEntityActive(child))
+})
+
 const metrics = computed(() => {
   const cards = roomCards.value
   const overCapacity = cards.filter((card) => card.status === 'over').length
@@ -125,6 +137,25 @@ function formatDateTime(ts?: string) {
   })
 }
 
+function openRoomDetails(roomId: number) {
+  selectedRoomId.value = roomId
+}
+
+function closeRoomDetails() {
+  selectedRoomId.value = null
+}
+
+async function checkoutChildFromRoom(child: Child, roomId: number) {
+  if (checkoutInProgress.has(child.id)) return
+  checkoutInProgress.add(child.id)
+
+  try {
+    await store.checkoutChild(child.id, roomId)
+  } finally {
+    checkoutInProgress.delete(child.id)
+  }
+}
+
 onMounted(async () => {
   await store.fetchAllDashboardData()
   store.connectSSE()
@@ -165,7 +196,18 @@ onUnmounted(() => {
         <div v-if="!roomCards.length" class="empty-state">Keine passenden Kinder gefunden.</div>
 
         <div v-else class="rooms-grid">
-          <article v-for="card in roomCards" :key="card.room.id" class="room" :class="card.status">
+          <article
+            v-for="card in roomCards"
+            :key="card.room.id"
+            class="room"
+            :class="card.status"
+            role="button"
+            tabindex="0"
+            :aria-label="`Raum ${card.room.name} anzeigen`"
+            @click="openRoomDetails(card.room.id)"
+            @keydown.enter.prevent="openRoomDetails(card.room.id)"
+            @keydown.space.prevent="openRoomDetails(card.room.id)"
+          >
             <header class="room-header">
               <h3>{{ card.room.name }}</h3>
               <span class="capacity">{{ card.occupancyCount }} / {{ card.capacityLabel }}</span>
@@ -235,6 +277,50 @@ onUnmounted(() => {
         <p v-else class="muted">Keine Bewegungen für den aktuellen Filter.</p>
       </section>
     </div>
+
+    <div v-if="selectedRoomCard" class="room-modal-backdrop" @click="closeRoomDetails">
+      <div class="room-modal" role="dialog" aria-modal="true" @click.stop>
+        <header class="room-modal-header">
+          <div>
+            <h3>{{ selectedRoomCard.room.name }}</h3>
+            <p class="muted">
+              {{ selectedRoomCard.occupancyCount }} / {{ selectedRoomCard.capacityLabel }} Kinder
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            @click="closeRoomDetails"
+            aria-label="Schließen"
+          >
+            ×
+          </button>
+        </header>
+
+        <ul v-if="selectedRoomChildren.length" class="child-list modal-child-list">
+          <li v-for="child in selectedRoomChildren" :key="child.id" class="child-item">
+            <img
+              v-if="child.photo_url"
+              :src="child.photo_url"
+              :alt="`Foto von ${child.name}`"
+              class="avatar"
+            />
+            <span v-else class="avatar placeholder">{{ child.name.charAt(0).toUpperCase() }}</span>
+            <span class="child-name">{{ child.name }}</span>
+            <button
+              class="remove-child"
+              type="button"
+              :disabled="checkoutInProgress.has(child.id)"
+              :aria-label="`${child.name} austragen`"
+              @click.stop="checkoutChildFromRoom(child, selectedRoomCard.room.id)"
+            >
+              {{ checkoutInProgress.has(child.id) ? '…' : '✕' }}
+            </button>
+          </li>
+        </ul>
+        <p v-else class="muted">Keine Kinder im Raum.</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -270,6 +356,7 @@ onUnmounted(() => {
   display: grid;
   gap: 15px;
   align-content: start;
+  width: 523px;
 }
 
 /* ===== SHARED STYLES ===== */
@@ -297,14 +384,15 @@ onUnmounted(() => {
 /* ===== METRICS SECTION ===== */
 .metrics {
   display: grid;
-  gap: 15px;
+  width: 523px;
+  gap: 20px;
   grid-template-columns: repeat(2, 1fr);
   grid-auto-rows: max-content;
 }
 
 .metric-card {
-  width: 251px;
-  height: 145px;
+  width: 100%;
+  min-height: 145px;
   border: 1px solid #e6edf3;
   border-radius: 5px;
   padding: 11px;
@@ -353,11 +441,14 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 15px;
+  align-items: start;
+  grid-auto-rows: min-content;
 }
 
 .room {
-  width: 302px;
-  height: 148px;
+  width: 100%;
+  max-width: 302px;
+  min-height: 148px;
   border: 1px solid #dbe4ff;
   border-radius: 5px;
   padding: 12px;
@@ -367,6 +458,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 13px 0 rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  align-self: start;
 }
 
 .room.warn {
@@ -426,6 +519,28 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.child-name {
+  flex: 1;
+}
+
+.remove-child {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.remove-child:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .avatar {
@@ -508,6 +623,50 @@ time {
   text-align: center;
 }
 
+/* ===== MODAL ===== */
+.icon-button {
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  color: #475569;
+}
+
+.room-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 1000;
+}
+
+.room-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
+  border-radius: 5px;
+  text-align: left;
+}
+
+.room-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.modal-child-list {
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1200px) {
   .dashboard {
@@ -518,9 +677,32 @@ time {
   .right-column {
     grid-column: 1;
   }
+
+  .right-column {
+    width: 100%;
+  }
+
+  .metrics {
+    width: 100%;
+  }
+
+  .input {
+    width: 100%;
+  }
 }
 
 @media (max-width: 700px) {
+  .dashboard {
+    gap: 20px;
+    padding: 0 12px 20px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    font-size: 18px;
+  }
+
   .toolbar {
     grid-template-columns: 1fr;
   }
@@ -530,7 +712,44 @@ time {
   }
 
   .metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+    gap: 15px;
+  }
+
+  .metric-card {
+    min-height: 110px;
+    padding: 8px;
+  }
+
+  .metric-label {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .metric-value {
+    font-size: 20px;
+  }
+
+  .room {
+    max-width: none;
+  }
+
+  .input {
+    height: 48px;
+    width: 100%;
+  }
+
+  .room-header h3 {
+    font-size: 1.05rem;
+  }
+
+  .capacity-track {
+    height: 14px;
+  }
+
+  .room-modal {
+    max-width: 100%;
   }
 }
 </style>

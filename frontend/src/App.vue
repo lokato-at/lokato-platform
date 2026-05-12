@@ -4,12 +4,10 @@
       <h1>Lokato</h1>
     </header>
 
-    <img
-      v-if="!isTabletRoute"
-      src="./views/images/hort_pregarten.svg"
-      alt="Hort Pregarten"
-      class="header-image"
-    />
+    <picture v-if="!isTabletRoute">
+      <source media="(max-width: 700px)" srcset="./views/images/hort_pregarten_mobile.webp" />
+      <img src="./views/images/hort_pregarten.svg" alt="Hort Pregarten" class="header-image" />
+    </picture>
 
     <nav v-if="!isTabletRoute" class="nav">
       <router-link
@@ -162,7 +160,7 @@ h3 {
 
 
 hr {
-  margin: 10px 0;
+  margin: 0px 0;
   opacity: 0.4;
 }
 
@@ -178,5 +176,25 @@ hr {
 :global(html),
 :global(body) {
   overflow-x: hidden;
+}
+
+@media (max-width: 700px) {
+  .nav {
+    display: none;
+  }
+
+  .header {
+    position: relative;
+    z-index: 10;
+  }
+
+  .header-image {
+    height: 220px;
+    margin-top: -20px;
+    margin-bottom: 0px;
+    object-fit: cover;
+    object-position: center;
+    z-index: 1;
+  }
 }
 </style>

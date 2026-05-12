@@ -131,10 +131,7 @@ def run_cleanup(cfg: Dict, config_path: Path) -> int:
     for path in files:
         age_days = (now - dt.datetime.fromtimestamp(path.stat().st_mtime)).days
         if age_days > int(cfg["retention_days"]):
-            size = path.stat().st_size
-            path.unlink(missing_ok=True)
-            deleted += 1
-            bytes_freed += size
+            size = path.stat().st_size; path.unlink(missing_ok=True); deleted += 1; bytes_freed += size
             print(f"deleted: {path} ({size} bytes)")
     if missing:
         print("WARN: Einige konfigurierte Logdateien fehlen und konnten nicht bereinigt werden.")

@@ -1,15 +1,23 @@
 {
   "log_files": [
-    "backend/storage/logs/laravel.log",
     "backend/storage/logs/scan.log",
+    "backend/storage/logs/cron.log",
+    "backend/storage/logs/laravel.log",
     "backend/storage/logs/sse.log"
   ],
   "retention_days": 14,
   "latency_warn_ms": 3000,
   "patterns": {
-    "scan_events": ["scan_processed", "MQTT scan ingested", "movement_id"],
-    "warnings": ["warning", "mqtt_latency_warning", "ignored"],
-    "errors": ["error", "exception", "failed", "SQLSTATE"],
-    "daily_reset": ["daily_reset_finished", "children:daily-active-reset"]
+    "scan_success": ["scan_processed", "mqtt_message_processed", "movement_id"],
+    "mqtt_connected": ["mqtt_connection_initialized"],
+    "mqtt_subscribed": ["mqtt_subscribed"],
+    "mqtt_received": ["mqtt_message_received"],
+    "mqtt_ignored": ["mqtt_message_ignored"],
+    "mqtt_latency": ["mqtt_latency_warning"],
+    "mqtt_validation": ["mqtt_payload_validation_failed", "mqtt_payload_json_decode_failed", "mqtt_event_time_invalid"],
+    "db_errors": ["SQLSTATE", "QueryException", "database", "db.*failed"],
+    "daily_reset_success": ["daily_reset_finished"],
+    "daily_reset_failed": ["daily_reset_failed"],
+    "errors": ["error", "exception", "failed", "SQLSTATE"]
   }
 }

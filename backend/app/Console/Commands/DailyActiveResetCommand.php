@@ -7,6 +7,7 @@ use App\Models\Child;
 use App\Support\AppLogger;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class DailyActiveResetCommand extends Command
 {
@@ -18,28 +19,39 @@ class DailyActiveResetCommand extends Command
         $start = microtime(true);
         $resetDate = now(config('app.timezone'))->toDateString();
 
-        AppLogger::event('cron', 'daily_reset_started', ['reset_date' => $resetDate], AppLogger::shouldLogDiagnostics('cron') ? 'info' : 'debug');
+        try {
+            AppLogger::event('cron', 'daily_reset_started', ['reset_date' => $resetDate], AppLogger::shouldLogDiagnostics('cron') ? 'info' : 'debug');
 
-        $affected = Child::query()->where('is_active', true)->update(['is_active' => false]);
+            $affected = Child::query()->where('is_active', true)->update(['is_active' => false]);
 
-        if (Schema::hasTable('app_runtime_state')) {
-            AppRuntimeState::query()->updateOrCreate(
-                ['state_key' => 'last_daily_reset_date'],
-                ['state_value' => $resetDate]
-            );
+            if (Schema::hasTable('app_runtime_state')) {
+                AppRuntimeState::query()->updateOrCreate(
+                    ['state_key' => 'last_daily_reset_date'],
+                    ['state_value' => $resetDate]
+                );
 
-            AppRuntimeState::query()->updateOrCreate(
-                ['state_key' => 'last_daily_reset_at'],
-                ['state_value' => now()->toIso8601String()]
-            );
+                AppRuntimeState::query()->updateOrCreate(
+                    ['state_key' => 'last_daily_reset_at'],
+                    ['state_value' => now()->toIso8601String()]
+                );
+            }
+
+            AppLogger::event('cron', 'daily_reset_finished', [
+                'reset_date' => $resetDate,
+                'affected_children_count' => $affected,
+                'duration_ms' => (int) ((microtime(true) - $start) * 1000),
+            ], 'info');
+
+            return self::SUCCESS;
+        } catch (Throwable $e) {
+            AppLogger::exception('cron', 'daily_reset_failed', $e, [
+                'reset_date' => $resetDate,
+                'duration_ms' => (int) ((microtime(true) - $start) * 1000),
+            ]);
+
+            $this->error('Daily active reset failed: ' . $e->getMessage());
+
+            return self::FAILURE;
         }
-
-        AppLogger::event('cron', 'daily_reset_finished', [
-            'reset_date' => $resetDate,
-            'affected_children_count' => $affected,
-            'duration_ms' => (int) ((microtime(true) - $start) * 1000),
-        ], 'info');
-
-        return self::SUCCESS;
     }
 }

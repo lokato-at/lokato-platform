@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Child;
+use App\Models\ChildLocation;
+use App\Models\MovementLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ChildrenController extends Controller
 {
@@ -76,6 +79,49 @@ class ChildrenController extends Controller
                 'area' => $child->location->room?->area,
                 'updated_at' => $child->location->updated_at?->toIso8601String(),
             ] : null,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/children/{child}/checkout
+     * Kind aus dem Raum austragen und deaktivieren
+     */
+    public function checkout(Request $request, Child $child): JsonResponse
+    {
+        $occurredAt = now();
+
+        $movement = DB::transaction(function () use ($child, $occurredAt) {
+            $currentLocation = ChildLocation::query()
+                ->select(['child_id', 'room_id'])
+                ->where('child_id', $child->id)
+                ->lockForUpdate()
+                ->first();
+
+            $fromRoomId = $currentLocation?->room_id;
+
+            if ($currentLocation) {
+                $currentLocation->delete();
+            }
+
+            if ($child->is_active !== false) {
+                $child->forceFill(['is_active' => false])->save();
+            }
+
+            return MovementLog::create([
+                'child_id' => $child->id,
+                'from_room_id' => $fromRoomId,
+                'to_room_id' => null,
+                'device_id' => null,
+                'source' => 'manual',
+                'occurred_at' => $occurredAt,
+            ]);
+        });
+
+        return response()->json([
+            'child_id' => $child->id,
+            'from_room_id' => $movement->from_room_id,
+            'to_room_id' => $movement->to_room_id,
+            'occurred_at' => $movement->occurred_at?->toIso8601String(),
         ]);
     }
 }

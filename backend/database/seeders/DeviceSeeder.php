@@ -11,19 +11,29 @@ class DeviceSeeder extends Seeder
 {
     public function run(): void
     {
-        $bastelraum = Room::where('name', 'Kreativraum')->first();
-        $turnsaal   = Room::where('name', 'Turnsaal')->first();
+        $untergeschoss = Room::where('name', 'Untergeschoss')->first();
+        $obergeschoss   = Room::where('name', 'Obergeschoss')->first();
+        $garten   = Room::where('name', 'Garten')->first();
 
         Device::create([
-            'name'    => 'Tür Kreativraum links',
+            'name'    => 'Untergeschoss',
             'device_key' => 'RaspberryChild01',
-            'room_id' => $bastelraum->id,
+            'room_id' => $untergeschoss->id,
         ]);
 
         Device::create([
-            'name'    => 'Tür Turnsaal rechts',
+            'name'    => 'Obergeschoss',
             'device_key' => 'RaspberryChild02',
-            'room_id' => $turnsaal->id,
+            'room_id' => $obergeschoss->id,
         ]);
+
+        Device::create([
+            'name'    => 'Garten',
+            'device_key' => 'RaspberryChild03',
+            'room_id' => $garten->id,
+        ]);
+
+
+
     }
 }

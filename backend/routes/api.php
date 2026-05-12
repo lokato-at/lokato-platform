@@ -25,6 +25,7 @@ Route::prefix('v1')->group(function () {
     // Kinder (aktueller Standort)
     Route::get('/children', [ChildrenController::class, 'index']);
     Route::get('/children/{child}', [ChildrenController::class, 'show']);
+    Route::post('/children/{child}/checkout', [ChildrenController::class, 'checkout']);
 
     // Historie – global oder pro Kind
     Route::get('/movement-log', [MovementLogController::class, 'index']);

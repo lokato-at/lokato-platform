@@ -109,8 +109,9 @@ onUnmounted(() => {
 .tablet-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   gap: 24px;
+  text-align: left;
 }
 
 .room-title {
@@ -165,7 +166,7 @@ onUnmounted(() => {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -224,12 +225,13 @@ onUnmounted(() => {
 
   .tablet-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    text-align: center;
   }
 
   .status {
-    justify-items: start;
-    text-align: left;
+    justify-items: center;
+    text-align: center;
   }
 }
 </style>

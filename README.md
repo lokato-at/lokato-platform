@@ -207,6 +207,7 @@ docker exec -it lokato-mosquitto mosquitto_pub
 
 
 
+
 Linux:
 ```bash
 docker exec -it lokato-mosquitto mosquitto_pub \

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Log audit tool for production checks (Raspberry Pi/Linux)."""
 from __future__ import annotations
-import argparse, datetime as dt, json, re
+
+import argparse
+import datetime as dt
+import json
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -23,6 +27,10 @@ DEFAULT_PATTERNS = {
 }
 
 def load_config(path: Path) -> Dict:
+    if not path.exists():
+        print(f"ERROR: Config file not found: {path}")
+        raise FileNotFoundError(path)
+
     with path.open("r", encoding="utf-8") as f:
         cfg = json.load(f)
     cfg.setdefault("log_files", [])
@@ -34,22 +42,27 @@ def load_config(path: Path) -> Dict:
 def resolve_log_paths(cfg: Dict, config_path: Path) -> Tuple[List[Path], List[Path]]:
     existing, missing = [], []
     base = config_path.parent.resolve()
+    repo_root = base.parent.parent.resolve() if len(base.parents) >= 2 else base
     cwd = Path.cwd().resolve()
     for entry in cfg["log_files"]:
         raw = Path(entry)
-        candidates = [raw] if raw.is_absolute() else [cwd / raw, base / raw]
+        candidates = [raw] if raw.is_absolute() else [cwd / raw, base / raw, repo_root / raw]
         found = next((p.resolve() for p in candidates if p.exists()), None)
         if found:
             existing.append(found)
         else:
-            missing.append((cwd / raw).resolve())
+            missing.append((repo_root / raw).resolve())
     return existing, missing
 
 def in_period(line: str, start: dt.date) -> bool:
     m = DATE_RE.search(line)
-    if not m: return True
-    try: return dt.date.fromisoformat(m.group(1)) >= start
-    except ValueError: return True
+    if not m:
+        return True
+
+    try:
+        return dt.date.fromisoformat(m.group(1)) >= start
+    except ValueError:
+        return True
 
 def iter_lines(files: Iterable[Path], start: dt.date):
     for file in files:
@@ -63,7 +76,10 @@ def run_check(cfg: Dict, period: str, config_path: Path) -> int:
     start = dt.date.today() - dt.timedelta(days=days)
     files, missing = resolve_log_paths(cfg, config_path)
     if not files:
-        print("ERROR: Keine Logdatei gefunden. Bitte config.json prüfen.")
+        print("ERROR: Keine konfigurierte Logdatei gefunden.")
+        print("Hinweis: Die config.json ist vorhanden, aber die unten gelisteten Log-Dateien fehlen aktuell:")
+        for m in missing:
+            print(f"- {m}")
         return 2
 
     patt = {k: [re.compile(x, re.IGNORECASE) for x in v] for k, v in cfg["patterns"].items()}
@@ -78,7 +94,8 @@ def run_check(cfg: Dict, period: str, config_path: Path) -> int:
             if any(r.search(line) for r in regexes):
                 stats[key] += 1
         dm = DURATION_RE.search(line)
-        if dm: durations.append(int(dm.group(1)))
+        if dm:
+            durations.append(int(dm.group(1)))
 
     print(f"\nLog Audit ({period})\n" + "=" * 34)
     print(f"Zeitraum: seit {start.isoformat()}")
@@ -99,7 +116,8 @@ def run_check(cfg: Dict, period: str, config_path: Path) -> int:
 
     if anomalies:
         print("\nAuffälligkeiten:")
-        for a in anomalies: print(f"- {a}")
+        for a in anomalies:
+            print(f"- {a}")
 
     if missing:
         return 2
@@ -107,7 +125,9 @@ def run_check(cfg: Dict, period: str, config_path: Path) -> int:
 
 def run_cleanup(cfg: Dict, config_path: Path) -> int:
     files, missing = resolve_log_paths(cfg, config_path)
-    now = dt.datetime.now(); deleted=0; bytes_freed=0
+    now = dt.datetime.now()
+    deleted = 0
+    bytes_freed = 0
     for path in files:
         age_days = (now - dt.datetime.fromtimestamp(path.stat().st_mtime)).days
         if age_days > int(cfg["retention_days"]):
@@ -125,7 +145,14 @@ def main() -> int:
     ap.add_argument("--config", default="config.json")
     args = ap.parse_args()
     config_path = Path(args.config).resolve()
-    cfg = load_config(config_path)
+    try:
+        cfg = load_config(config_path)
+    except FileNotFoundError:
+        return 2
+    except json.JSONDecodeError as exc:
+        print(f"ERROR: Invalid JSON in config: {config_path} ({exc})")
+        return 2
+
     return run_check(cfg, args.period, config_path) if args.command == "check" else run_cleanup(cfg, config_path)
 
 if __name__ == "__main__":

@@ -7,9 +7,12 @@ use Throwable;
 
 class AppLogger
 {
-    private const CHANNEL_BY_COMPONENT = [
+    private const CHANNEL_MAP = [
         'mqtt' => 'scan',
         'scan' => 'scan',
+        'sse' => 'sse',
+        'cron' => 'cron',
+        'db' => 'scan',
     ];
 
     public static function enabled(): bool
@@ -46,14 +49,7 @@ class AppLogger
             'timestamp' => now()->toIso8601String(),
         ], self::sanitize($context));
 
-        $channel = self::channelFor($component);
-
-        if (self::format() === 'json') {
-            Log::channel($channel)->log($level, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-            return;
-        }
-
-        Log::channel($channel)->log($level, $event, $payload);
+        self::write($component, $level, $event, $payload);
     }
 
     public static function exception(string $component, string $event, Throwable $e, array $context = []): void
@@ -67,12 +63,46 @@ class AppLogger
 
     private static function sanitize(array $context): array
     {
-        unset($context['password'], $context['secret'], $context['token']);
+        $sensitiveKeys = [
+            'password', 'secret', 'token', 'authorization', 'api_key',
+            'mqtt_auth_password', 'db_password',
+        ];
+
+        foreach ($context as $key => $value) {
+            $lowerKey = strtolower((string) $key);
+            if (in_array($lowerKey, $sensitiveKeys, true)) {
+                $context[$key] = '[REDACTED]';
+                continue;
+            }
+
+            if (is_array($value)) {
+                $context[$key] = self::sanitize($value);
+            }
+        }
+
         return $context;
     }
 
-    private static function channelFor(string $component): string
+    private static function write(string $component, string $level, string $event, array $payload): void
     {
-        return self::CHANNEL_BY_COMPONENT[$component] ?? config('logging.default', 'stack');
+        $channelName = self::CHANNEL_MAP[$component] ?? config('logging.default', 'stack');
+
+        try {
+            if (self::format() === 'json') {
+                $message = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+                Log::channel($channelName)->log($level, $message ?: $event, $payload);
+                return;
+            }
+
+            Log::channel($channelName)->log($level, $event, $payload);
+        } catch (Throwable $e) {
+            Log::log('error', 'app_logger_channel_fallback', [
+                'component' => $component,
+                'event' => $event,
+                'target_channel' => $channelName,
+                'logger_error' => $e->getMessage(),
+                'payload' => $payload,
+            ]);
+        }
     }
 }

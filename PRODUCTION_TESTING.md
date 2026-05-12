@@ -6,6 +6,14 @@
 - Laravel Scheduler laufen lassen, damit der Daily Reset um 01:00 ausgeführt wird: `php artisan schedule:work`.
 - Alternativ per System-Cron minütlich: `* * * * * cd /workspace/lokato-platform/backend && php artisan schedule:run >> /dev/null 2>&1`
 
+## Pflicht-Befehle nach .env Änderungen
+- `php artisan config:clear`
+- `php artisan cache:clear`
+
+## MQTT Topic Hinweis
+- MQTT Topics sind exakt. `/api/v1/scan` und `api/v1/scan` sind **unterschiedliche** Topics.
+- `MQTT_TOPIC_SCAN` muss exakt zum Publisher passen (inkl. führendem Slash).
+
 ## Log Profile
 Normal:
 - LOG_ENABLED=true
@@ -37,6 +45,22 @@ Warnungen erscheinen bei `mqtt_latency_warning`, wenn `mqtt_delivery_latency_ms 
 ## Docker Logs
 - MySQL: `docker logs lokato-mysql`
 - Mosquitto: `docker logs lokato-mosquitto`
+
+## Subscriber Start (Produktionstest)
+- `php artisan mqtt:subscribe --debug`
+- Einmaltest: `php artisan mqtt:subscribe --once --debug`
+- Log prüfen: `tail -f backend/storage/logs/scan.log`
+
+## Daily Reset Test
+- Manuell ausführen: `php artisan children:daily-active-reset`
+- Erwartete Events: `daily_reset_started`, `daily_reset_finished` (oder `daily_reset_failed`).
+- Log prüfen: `tail -f backend/storage/logs/cron.log`
+
+## Typische Fehlerbilder
+- Keine Einträge in `scan.log`: falscher Channel oder falsche Dateirechte auf `backend/storage/logs`.
+- Subscriber disconnectet ständig: gleiche `MQTT_CLIENT_ID` in mehreren Prozessen.
+- Logs landen nur in `laravel.log`: Config-Cache nicht geleert.
+- Audit findet nichts: falsches Arbeitsverzeichnis oder nicht vorhandene Logdateien.
 
 ## Backup
 Vor Migrationen ein DB-Dump: `mysqldump -h <host> -u <user> -p <db> > backup.sql`
@@ -83,6 +107,15 @@ python3 log_audit.py cleanup --config config.json
 ### 6) Ergebnisse ansehen
 - Cron-Output: `/var/log/lokato-log-audit.log`
 - App-Logs: `backend/storage/logs/laravel.log`, `backend/storage/logs/scan.log`, `backend/storage/logs/sse.log`
+
+## Manuelle Produktions-Test-Checkliste
+- Laravel startet und Health ist erreichbar (`/api/health`).
+- DB ist erreichbar (z. B. `php artisan migrate:status`).
+- MQTT Subscriber verbindet (`mqtt_connection_initialized`, `mqtt_subscribed`).
+- Test-MQTT Nachricht wird empfangen (`mqtt_message_received`).
+- Scan wird verarbeitet (`mqtt_message_processed`) oder sauber ignoriert (`mqtt_message_ignored`).
+- `scan.log` und `cron.log` enthalten die erwarteten Events.
+- `python3 tools/log_audit/log_audit.py check --period daily --config tools/log_audit/config.json` liefert erwarteten Status.
 
 ### Kurz erklärt (Cron-Felder)
 `10 6 * * *` bedeutet:

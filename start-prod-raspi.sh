@@ -1,150 +1,445 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Lokato — Produktions-Setup fuer Raspberry Pi OS (Bookworm 64-bit empfohlen)
+# =============================================================================
+# Nativ, kein Docker. Installiert nginx + php-fpm + MariaDB + Mosquitto via
+# apt, deployt Backend nach /var/www/lokato/backend und Frontend nach
+# /var/www/lokato/frontend/dist, startet den MQTT-Subscriber als systemd-Unit.
+#
+# Wird idempotent ausgefuehrt — beim zweiten Lauf werden bestehende DB,
+# Konfigs und .env-Dateien NICHT ueberschrieben.
+#
+# Aufruf:
+#   ./start-prod-raspi.sh
+#
+# Wichtige Env-Variablen (optional):
+#   PI_IP=192.168.1.50           Statische IP, die der Pi bekommen soll
+#   INSTALL_DEPS=0               apt-Block ueberspringen (bei wiederholtem Run)
+#   CONFIG_NETWORK=0             IP-Konfiguration ueberspringen
+#   DB_PASSWORD=changeme         Passwort fuer den Laravel-DB-User
+# =============================================================================
+
 set -Eeuo pipefail
 
+# ----- Konfiguration ---------------------------------------------------------
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$PROJECT_ROOT/backend"
-FRONTEND_DIR="$PROJECT_ROOT/frontend"
+BACKEND_SRC="$PROJECT_ROOT/backend"
+FRONTEND_SRC="$PROJECT_ROOT/frontend"
 DOCKER_DIR="$PROJECT_ROOT/docker"
-RUN_DIR="$PROJECT_ROOT/.run"
-LOG_DIR="$PROJECT_ROOT/logs"
-BACKEND_PORT="${BACKEND_PORT:-8001}"
-FRONTEND_PORT="${FRONTEND_PORT:-4173}"
-INSTALL_DEPS="${INSTALL_DEPS:-1}"
 
+DEPLOY_ROOT="${DEPLOY_ROOT:-/var/www/lokato}"
+BACKEND_DEPLOY="$DEPLOY_ROOT/backend"
+FRONTEND_DEPLOY="$DEPLOY_ROOT/frontend"
+
+LOG_DIR="/var/log/lokato"
+
+# PI_IP ist die statische Adresse, die der Pi annehmen soll. Wenn das Netz
+# DHCP-only ist, setze CONFIG_NETWORK=0 und nimm die Router-vergebene IP.
+PI_IP="${PI_IP:-192.168.1.50}"
+PI_GATEWAY="${PI_GATEWAY:-192.168.1.1}"
+PI_DNS="${PI_DNS:-192.168.1.1 1.1.1.1}"
+PI_NETMASK_CIDR="${PI_NETMASK_CIDR:-24}"
+
+DB_NAME="${DB_NAME:-lokato_db}"
+DB_USER="${DB_USER:-lokato}"
+DB_PASSWORD="${DB_PASSWORD:-changeme}"
+
+INSTALL_DEPS="${INSTALL_DEPS:-1}"
+CONFIG_NETWORK="${CONFIG_NETWORK:-1}"
+
+# ----- Helpers ---------------------------------------------------------------
 info() { echo -e "\033[36m==> $*\033[0m"; }
-ok() { echo -e "\033[32m[OK] $*\033[0m"; }
+ok()   { echo -e "\033[32m[OK] $*\033[0m"; }
 warn() { echo -e "\033[33m[WARN] $*\033[0m"; }
 fail() { echo -e "\033[31m[ERROR] $*\033[0m"; exit 1; }
 
-need_cmd() {
-  command -v "$1" >/dev/null 2>&1
-}
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-ensure_root_tools() {
-  if [[ "$INSTALL_DEPS" != "1" ]]; then
-    return
-  fi
-
-  info "Installiere Systempakete für Raspberry Pi OS (falls nötig)..."
-  sudo apt-get update
-  sudo apt-get install -y \
-    docker.io docker-compose-plugin \
-    php-cli php-mysql php-mbstring php-xml php-curl php-zip unzip composer \
-    nodejs npm curl git
-  sudo systemctl enable --now docker
+# Fuehrt Operationen als www-data aus, mit HOME im Deploy-Pfad damit
+# Composer/npm-Caches dort landen (nicht in /root, nicht in /home/pi).
+as_www_data() {
+    sudo -u www-data \
+        HOME="$DEPLOY_ROOT" \
+        PATH="/usr/local/bin:/usr/bin:/bin" \
+        "$@"
 }
 
 ensure_file_from_example() {
-  local target="$1"
-  local example="$2"
-  if [[ ! -f "$target" ]]; then
-    cp "$example" "$target"
-    ok "$(basename "$target") aus Example-Datei erstellt."
-  fi
-}
-
-ensure_env_value() {
-  local file="$1"
-  local key="$2"
-  local value="$3"
-  if grep -qE "^${key}=" "$file"; then
-    return
-  fi
-  printf '\n%s=%s\n' "$key" "$value" >> "$file"
-  ok "$key in $(basename "$file") ergänzt."
-}
-
-wait_for_docker() {
-  for _ in {1..30}; do
-    if docker info >/dev/null 2>&1; then
-      ok "Docker Engine ist erreichbar."
-      return
+    local target="$1"
+    local example="$2"
+    if [[ -f "$target" ]]; then
+        return
     fi
-    sleep 2
-  done
-  fail "Docker läuft nicht oder antwortet nicht."
+    if [[ ! -f "$example" ]]; then
+        fail "Template fehlt: $example"
+    fi
+    sudo cp "$example" "$target"
+    ok "$(basename "$target") aus $(basename "$example") angelegt."
 }
 
-start_process() {
-  local pidfile="$1"
-  local logfile="$2"
-  shift 2
+# ----- Vorbedingungen --------------------------------------------------------
+if [[ $EUID -eq 0 ]]; then
+    fail "Bitte NICHT als root aufrufen — das Script eskaliert per sudo punktuell."
+fi
+if ! sudo -n true 2>/dev/null; then
+    info "sudo benoetigt — du wirst gleich nach deinem Passwort gefragt."
+    sudo -v || fail "sudo verweigert."
+fi
 
-  if [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" >/dev/null 2>&1; then
-    warn "Prozess $(basename "$pidfile") läuft bereits mit PID $(cat "$pidfile")."
-    return
-  fi
-
-  nohup "$@" >"$logfile" 2>&1 &
-  echo $! > "$pidfile"
+# ----- 1) apt: System-Pakete -------------------------------------------------
+detect_php_version() {
+    # Auf Pi OS Bookworm: php8.2. Bullseye: php7.4 oder php8.1 (via PPA).
+    # Wir lassen Pakete einfach mit "php" + "php-fpm" installieren, der
+    # Default-Metapaketname zieht die Distributions-Default-Version.
+    if [[ -d /etc/php ]]; then
+        ls /etc/php/ 2>/dev/null | sort -V | tail -n 1
+    else
+        echo ""
+    fi
 }
 
-mkdir -p "$RUN_DIR" "$LOG_DIR"
+install_system_packages() {
+    if [[ "$INSTALL_DEPS" != "1" ]]; then
+        warn "INSTALL_DEPS=0 — apt-Block uebersprungen."
+        return
+    fi
 
-ensure_root_tools
+    info "apt update + Pakete installieren (das kann dauern)..."
+    sudo apt-get update
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        nginx \
+        php-fpm php-cli php-mysql php-mbstring php-xml php-curl php-zip \
+        php-bcmath php-sockets php-intl php-gd php-opcache \
+        composer \
+        default-mysql-server \
+        mosquitto mosquitto-clients \
+        nodejs npm \
+        rsync curl git unzip
+    ok "Systempakete installiert."
+}
 
-for cmd in docker php composer node npm; do
-  need_cmd "$cmd" || fail "$cmd ist nicht installiert."
-done
+# ----- 2) Netzwerk: statische IP --------------------------------------------
+configure_network() {
+    if [[ "$CONFIG_NETWORK" != "1" ]]; then
+        warn "CONFIG_NETWORK=0 — Netzkonfiguration uebersprungen."
+        return
+    fi
 
-info "Prüfe Docker..."
-sudo systemctl start docker || true
-wait_for_docker
+    info "Pruefe Netzwerk-Manager..."
+    if systemctl is-active --quiet NetworkManager 2>/dev/null; then
+        info "NetworkManager aktiv → nmcli-Pfad."
+        local con
+        con="$(nmcli -t -f NAME,DEVICE c show --active | awk -F: '$2!="" && $2!="lo" {print $1; exit}')"
+        if [[ -z "$con" ]]; then
+            warn "Keine aktive Verbindung gefunden — IP-Setting uebersprungen."
+            return
+        fi
+        info "Setze statische IP auf Connection \"$con\" → $PI_IP/$PI_NETMASK_CIDR"
+        sudo nmcli con mod "$con" \
+            ipv4.addresses "$PI_IP/$PI_NETMASK_CIDR" \
+            ipv4.gateway "$PI_GATEWAY" \
+            ipv4.dns "$PI_DNS" \
+            ipv4.method manual
+        sudo nmcli con up "$con" || warn "nmcli con up fehlgeschlagen — manueller Reboot ggf. noetig."
+        ok "NetworkManager-IP gesetzt."
 
-info "Starte Infrastruktur-Container..."
-(
-  cd "$DOCKER_DIR"
-  docker compose up -d
-)
+    elif systemctl is-active --quiet dhcpcd 2>/dev/null; then
+        info "dhcpcd aktiv → /etc/dhcpcd.conf-Pfad."
+        local conf=/etc/dhcpcd.conf
+        if sudo grep -q "# lokato static block" "$conf"; then
+            ok "dhcpcd.conf hat bereits Lokato-Block — uebersprungen."
+            return
+        fi
+        sudo tee -a "$conf" >/dev/null <<EOF
 
-info "Prüfe Umgebungsdateien..."
-ensure_file_from_example "$BACKEND_DIR/.env" "$BACKEND_DIR/.env.example"
-ensure_file_from_example "$FRONTEND_DIR/.env" "$FRONTEND_DIR/.env.example"
-ensure_env_value "$BACKEND_DIR/.env" "APP_ENV" "production"
-ensure_env_value "$BACKEND_DIR/.env" "APP_DEBUG" "false"
-ensure_env_value "$BACKEND_DIR/.env" "API_SLOW_REQUEST_MS" "400"
-ensure_env_value "$BACKEND_DIR/.env" "SSE_MAX_CONNECTION_SECONDS" "60"
+# lokato static block
+interface eth0
+static ip_address=$PI_IP/$PI_NETMASK_CIDR
+static routers=$PI_GATEWAY
+static domain_name_servers=$PI_DNS
+EOF
+        sudo systemctl restart dhcpcd
+        ok "dhcpcd-IP gesetzt."
 
-info "Installiere Backend-Abhängigkeiten..."
-(
-  cd "$BACKEND_DIR"
-  composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-)
+    else
+        warn "Weder NetworkManager noch dhcpcd aktiv. Konfiguriere IP manuell."
+    fi
+}
 
-info "Installiere Frontend-Abhängigkeiten..."
-(
-  cd "$FRONTEND_DIR"
-  if [[ -f package-lock.json ]]; then
-    npm ci
-  else
-    npm install
-  fi
-)
+# ----- 3) MariaDB: DB + User -------------------------------------------------
+configure_database() {
+    info "MariaDB starten..."
+    sudo systemctl enable --now mariadb 2>/dev/null \
+        || sudo systemctl enable --now mysql
 
-info "Baue Frontend..."
-(
-  cd "$FRONTEND_DIR"
-  npm run build
-)
+    # User + Datenbank anlegen (idempotent ueber IF NOT EXISTS).
+    info "Datenbank \"$DB_NAME\" und User \"$DB_USER\" sicherstellen..."
+    sudo mysql --protocol=socket <<SQL
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+SQL
 
-info "Optimiere Laravel für Produktion..."
-(
-  cd "$BACKEND_DIR"
-  if ! grep -qE '^APP_KEY=base64:' .env; then
-    php artisan key:generate --force
-  fi
-  php artisan migrate --force
-  php artisan config:cache
-  php artisan route:cache
-  php artisan view:cache
-)
+    # Initial-Schema einspielen, wenn die Tabelle "children" noch fehlt.
+    # (Das Initial-SQL ist aus dem Docker-Setup. Idempotent: wenn schon
+    # Tabellen da sind, ueberspringen.)
+    local schema="$DOCKER_DIR/sql/init/01_schema.sql"
+    if [[ -f "$schema" ]]; then
+        local table_count
+        table_count="$(sudo mysql -N -B -e "SHOW TABLES FROM \`$DB_NAME\`;" | wc -l)"
+        if [[ "$table_count" -eq 0 ]]; then
+            info "Initial-Schema importieren ($schema)..."
+            sudo mysql "$DB_NAME" < "$schema"
+            ok "Schema importiert."
+        else
+            ok "DB enthaelt bereits $table_count Tabellen — Schema-Import uebersprungen."
+        fi
+    else
+        warn "Schema-Datei nicht gefunden: $schema (kein Initial-Import)."
+    fi
+}
 
-info "Starte Laravel API, MQTT Subscriber und Frontend Preview..."
-start_process "$RUN_DIR/backend.pid" "$LOG_DIR/backend.log" bash -lc "cd '$BACKEND_DIR' && php -d variables_order=GPCS artisan serve --host=0.0.0.0 --port=$BACKEND_PORT"
-start_process "$RUN_DIR/mqtt-subscriber.pid" "$LOG_DIR/mqtt-subscriber.log" bash -lc "cd '$BACKEND_DIR' && php artisan mqtt:subscribe"
-start_process "$RUN_DIR/frontend.pid" "$LOG_DIR/frontend.log" bash -lc "cd '$FRONTEND_DIR' && npx vite preview --host 0.0.0.0 --port $FRONTEND_PORT"
+# ----- 4) Mosquitto ----------------------------------------------------------
+configure_mosquitto() {
+    info "Mosquitto konfigurieren..."
+    # Repo-Config nach /etc/mosquitto/conf.d/ uebernehmen, falls vorhanden.
+    if [[ -f "$DOCKER_DIR/mosquitto/config/mosquitto.conf" ]]; then
+        sudo install -m 644 \
+            "$DOCKER_DIR/mosquitto/config/mosquitto.conf" \
+            /etc/mosquitto/conf.d/lokato.conf
+        ok "Mosquitto-Config installiert."
+    fi
+    sudo systemctl enable --now mosquitto
+}
 
-ok "Lokato Produktionsstart abgeschlossen."
-echo "Backend API:  http://$(hostname -I | awk '{print $1}'):$BACKEND_PORT"
-echo "Frontend:     http://$(hostname -I | awk '{print $1}'):$FRONTEND_PORT"
-echo "Logs:         $LOG_DIR"
+# ----- 5) nginx --------------------------------------------------------------
+configure_nginx() {
+    info "nginx-Site einspielen..."
+    sudo install -m 644 \
+        "$DOCKER_DIR/nginx/prod.conf" \
+        /etc/nginx/sites-available/lokato
+    sudo ln -sf /etc/nginx/sites-available/lokato /etc/nginx/sites-enabled/lokato
+    # Default-Site disablen, sonst hoeren beide auf :80.
+    sudo rm -f /etc/nginx/sites-enabled/default
+    sudo nginx -t
+    sudo systemctl enable nginx
+    sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx
+    ok "nginx aktiv."
+}
+
+# ----- 6) php-fpm ------------------------------------------------------------
+configure_php_fpm() {
+    local php_ver
+    php_ver="$(detect_php_version)"
+    if [[ -z "$php_ver" ]]; then
+        fail "Konnte PHP-Version unter /etc/php/ nicht ermitteln."
+    fi
+    info "php-fpm Pool fuer PHP $php_ver einspielen..."
+
+    sudo install -m 644 \
+        "$DOCKER_DIR/php-fpm/lokato-pool.conf" \
+        "/etc/php/$php_ver/fpm/pool.d/lokato.conf"
+
+    # Default-www-Pool deaktivieren (kollidiert sonst auf 9000 nicht, aber
+    # der Listen-Default ist ein Unix-Socket — Verwirrung minimieren).
+    if [[ -f "/etc/php/$php_ver/fpm/pool.d/www.conf" ]]; then
+        sudo mv "/etc/php/$php_ver/fpm/pool.d/www.conf" \
+                "/etc/php/$php_ver/fpm/pool.d/www.conf.disabled"
+        ok "Default-www-Pool nach www.conf.disabled verschoben."
+    fi
+
+    sudo mkdir -p "$LOG_DIR"
+    sudo chown www-data:www-data "$LOG_DIR"
+
+    sudo systemctl enable "php$php_ver-fpm"
+    sudo systemctl restart "php$php_ver-fpm"
+    ok "php$php_ver-fpm laeuft."
+}
+
+# ----- 7) systemd-Unit fuer MQTT-Subscriber ---------------------------------
+configure_systemd_mqtt() {
+    info "systemd-Unit lokato-mqtt einspielen..."
+    sudo install -m 644 \
+        "$DOCKER_DIR/systemd/lokato-mqtt.service" \
+        /etc/systemd/system/lokato-mqtt.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable lokato-mqtt
+    # Erst nach Backend-Deploy starten (siehe finalize_services).
+    ok "systemd-Unit installiert (Start erfolgt nach Backend-Deploy)."
+}
+
+# ----- 8) Deploy: Verzeichnisse + Permissions -------------------------------
+prepare_deploy_dirs() {
+    info "Deploy-Verzeichnisse anlegen..."
+    sudo mkdir -p "$BACKEND_DEPLOY" "$FRONTEND_DEPLOY/dist"
+    sudo chown -R www-data:www-data "$DEPLOY_ROOT"
+}
+
+# ----- 9) Backend deployen ---------------------------------------------------
+deploy_backend() {
+    info "Backend nach $BACKEND_DEPLOY syncen..."
+    sudo rsync -a --delete \
+        --exclude=.env \
+        --exclude=vendor/ \
+        --exclude=node_modules/ \
+        --exclude=storage/logs/ \
+        --exclude=storage/framework/cache/ \
+        --exclude=storage/framework/sessions/ \
+        --exclude=storage/framework/views/ \
+        --exclude=bootstrap/cache/*.php \
+        --exclude=.idea/ \
+        --exclude=.cursor/ \
+        --exclude=.junie/ \
+        --exclude=tests/ \
+        "$BACKEND_SRC/" "$BACKEND_DEPLOY/"
+
+    # Storage-Struktur sicherstellen (rsync hat sie geleert).
+    sudo install -d -o www-data -g www-data -m 775 \
+        "$BACKEND_DEPLOY/storage/logs" \
+        "$BACKEND_DEPLOY/storage/framework/cache" \
+        "$BACKEND_DEPLOY/storage/framework/sessions" \
+        "$BACKEND_DEPLOY/storage/framework/views" \
+        "$BACKEND_DEPLOY/bootstrap/cache"
+
+    # .env aus Pi-Template, wenn noch keine da ist.
+    ensure_file_from_example "$BACKEND_DEPLOY/.env" "$BACKEND_SRC/.env.raspi.example"
+
+    # Stale bootstrap-cache loeschen, sonst landet 'BoostServiceProvider not
+    # found' im Image, wenn das Cache-File noch dev-Pakete referenziert.
+    sudo find "$BACKEND_DEPLOY/bootstrap/cache" -maxdepth 1 -name "*.php" -delete
+
+    sudo chown -R www-data:www-data "$BACKEND_DEPLOY"
+
+    info "Composer install (--no-dev) im Deploy-Verzeichnis..."
+    as_www_data composer install \
+        --working-dir="$BACKEND_DEPLOY" \
+        --no-dev \
+        --optimize-autoloader \
+        --no-interaction \
+        --prefer-dist
+
+    # APP_KEY generieren, wenn leer.
+    if ! sudo grep -qE '^APP_KEY=base64:' "$BACKEND_DEPLOY/.env"; then
+        info "APP_KEY generieren..."
+        as_www_data php "$BACKEND_DEPLOY/artisan" key:generate --force
+    fi
+
+    info "Laravel optimieren + migrieren..."
+    as_www_data php "$BACKEND_DEPLOY/artisan" config:clear
+    as_www_data php "$BACKEND_DEPLOY/artisan" migrate --force
+    as_www_data php "$BACKEND_DEPLOY/artisan" config:cache
+    as_www_data php "$BACKEND_DEPLOY/artisan" route:cache
+    as_www_data php "$BACKEND_DEPLOY/artisan" view:cache
+    ok "Backend deployt."
+}
+
+# ----- 10a) tools/log_audit deployen (fuer Cron-Audits) ----------------------
+deploy_tools() {
+    local tools_src="$PROJECT_ROOT/tools/log_audit"
+    local tools_dst="$DEPLOY_ROOT/tools/log_audit"
+
+    if [[ ! -d "$tools_src" ]]; then
+        warn "tools/log_audit nicht im Repo gefunden — Cron-Audit muss anders verdrahtet werden."
+        return
+    fi
+
+    info "tools/log_audit nach $tools_dst syncen..."
+    sudo mkdir -p "$tools_dst"
+    sudo rsync -a --delete "$tools_src/" "$tools_dst/"
+    sudo chown -R www-data:www-data "$DEPLOY_ROOT/tools"
+    ok "Log-Audit-Tool deployt."
+}
+
+# ----- 10) Frontend bauen + deployen -----------------------------------------
+deploy_frontend() {
+    info "Frontend bauen ($FRONTEND_SRC)..."
+    # .env-Pi-Template sicherstellen — der Build liest daraus VITE_API_BASE_URL.
+    ensure_file_from_example "$FRONTEND_SRC/.env" "$FRONTEND_SRC/.env.raspi.example"
+
+    pushd "$FRONTEND_SRC" >/dev/null
+    if [[ -f package-lock.json ]]; then
+        npm ci
+    else
+        npm install
+    fi
+    npm run build
+    popd >/dev/null
+
+    info "Frontend-dist nach $FRONTEND_DEPLOY/dist syncen..."
+    sudo rsync -a --delete \
+        "$FRONTEND_SRC/dist/" "$FRONTEND_DEPLOY/dist/"
+    sudo chown -R www-data:www-data "$FRONTEND_DEPLOY"
+    ok "Frontend deployt."
+}
+
+# ----- 11) Services finalisieren --------------------------------------------
+finalize_services() {
+    local php_ver
+    php_ver="$(detect_php_version)"
+
+    info "Reload php-fpm + nginx, MQTT-Subscriber starten..."
+    sudo systemctl reload "php$php_ver-fpm"
+    sudo systemctl reload nginx
+    sudo systemctl restart lokato-mqtt
+    ok "Alle Services neu geladen."
+}
+
+# ----- 12) Health-Check + Summary -------------------------------------------
+print_summary() {
+    local actual_ip
+    actual_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    [[ -z "$actual_ip" ]] && actual_ip="$PI_IP"
+
+    cat <<EOF
+
+==============================================================================
+  Lokato Production Setup abgeschlossen
+==============================================================================
+
+  Erreichbar unter:     http://$actual_ip/
+  API-Health:           http://$actual_ip/api/health
+  API-Readiness:        http://$actual_ip/api/readiness
+
+  Backend-Code:         $BACKEND_DEPLOY
+  Frontend-Build:       $FRONTEND_DEPLOY/dist
+  Laravel-Logs:         $BACKEND_DEPLOY/storage/logs/
+  php-fpm-Log:          $LOG_DIR/php-fpm.log
+
+  MQTT-Subscriber:      systemctl status lokato-mqtt
+  MQTT-Logs:            journalctl -u lokato-mqtt -f
+
+  Bookmark fuer Tablets:        http://$actual_ip/
+  Dashboard-Bookmark:           http://$actual_ip/#/dashboard
+  Tablet-Bookmark (Raum 1):     http://$actual_ip/#/tablet/1
+
+  -- Was du EINMALIG nach dem ersten Lauf erledigen solltest:
+   1) DB-Passwort in $BACKEND_DEPLOY/.env aendern (aktuell: $DB_PASSWORD)
+      und MariaDB-User-Passwort entsprechend mit ALTER USER neu setzen.
+   2) APP_URL in $BACKEND_DEPLOY/.env auf "http://$actual_ip" pruefen.
+   3) Reboot zum Test, dass alles automatisch hochkommt.
+
+==============================================================================
+
+EOF
+}
+
+# ----- Main ------------------------------------------------------------------
+info "Lokato Produktions-Setup startet (Pi-IP-Ziel: $PI_IP)"
+
+install_system_packages
+configure_network
+configure_database
+configure_mosquitto
+configure_nginx
+configure_php_fpm
+configure_systemd_mqtt
+
+prepare_deploy_dirs
+deploy_backend
+deploy_tools
+deploy_frontend
+finalize_services
+
+print_summary

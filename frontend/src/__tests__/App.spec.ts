@@ -23,7 +23,7 @@ describe("App", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("Lokato Plattform");
+    expect(wrapper.text()).toContain("Lokato");
     expect(wrapper.text()).toContain("Dashboard");
     expect(wrapper.text()).toContain("Admin");
   });

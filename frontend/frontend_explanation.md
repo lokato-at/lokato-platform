@@ -151,16 +151,27 @@ Verantwortlichkeiten:
 
 Besonderheit: Server-Sent Events (SSE)
 
-Der Store verbindet sich mit dem Dashboard-Event-Stream des Backends und verarbeitet unter anderem folgende Events:
+Es gibt **einen einzigen** SSE-Endpoint im Backend (`GET /api/stream`). Modus und Filterung werden über Query-Params gesteuert:
 
-*   child.moved
-    
-*   room.occupancy.updated
-    
-*   room.alert.raised
-    
+| Aufrufer | URL | Verhalten |
+|---|---|---|
+| Dashboard | `/api/stream` | sieht Events aller Räume |
+| Raumtablet | `/api/stream?room=3&initial=1` | nur Events des angegebenen Raums + initialer Occupancy-Snapshot |
+| Reconnect | `…&last_event_id=movement:42;alert:5` | Cursor-basierter Resume nach `stream.draining` |
 
-Dadurch aktualisiert sich das Dashboard automatisch in Echtzeit, ohne Polling.
+Der Store registriert sich auf folgende benannte Events:
+
+*   `child.moved` — Bewegungs-Eintrag
+*   `room.occupancy.updated` — neuer Snapshot für einen Raum
+*   `room.alert.raised` — Alert (Kapazitäts-Überschreitung etc.)
+*   `stream.ready` — initial nach Connect (Cursor-Position)
+*   `stream.draining` — Server fordert Reconnect (Connection-Lifetime erreicht)
+
+Im Backend pollt der SSE-Controller alle 500 ms, **aber** mit Cache-Gate (`App\Support\SseChangeSignal`): solange seit dem letzten Tick kein Scan eingegangen ist, werden die DB-Queries komplett übersprungen. Dadurch:
+
+*   Idle-DB-Last = 0 (statt vorher 2 Queries/s pro Verbindung)
+*   Scan→UI-Latenz < 500 ms
+*   Automatische Aktualisierung ohne Browser-seitiges Polling
 
 3️⃣ DevDataStore (nur Entwicklung)
 

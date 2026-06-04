@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\ScanIngestService;
 use App\Support\AppLogger;
+use App\Support\SseChangeSignal;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +16,7 @@ class MqttSubscribeCommand extends Command
     protected $signature = 'mqtt:subscribe {--once} {--debug}';
     protected $description = 'Subscribe to scan topic and ingest scans safely.';
 
-    public function handle(ScanIngestService $scanIngestService): int
+    public function handle(ScanIngestService $scanIngestService, SseChangeSignal $sseChangeSignal): int
     {
         /*
          * WICHTIG:
@@ -93,6 +94,7 @@ class MqttSubscribeCommand extends Command
 
         $mqtt->subscribe($topic, function (string $incomingTopic, string $message) use (
             $scanIngestService,
+            $sseChangeSignal,
             $mqtt,
             $latWarn,
             $debugLogs,
@@ -234,6 +236,7 @@ class MqttSubscribeCommand extends Command
                 );
 
                 if ($movement) {
+                    $sseChangeSignal->bump();
                     $processingDurationMs = (int) ((microtime(true) - $processingStart) * 1000);
 
                     $this->info("MQTT scan ingested. movement_id={$movement->id}");

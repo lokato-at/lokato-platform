@@ -13,6 +13,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Greift NUR, wenn du den Vite-Dev-Server direkt aufrufst
+      // (http://localhost:5173). Bei `docker compose up` laeuft alles ueber
+      // nginx auf http://localhost — dann uebernimmt nginx das /api-Routing
+      // und dieser Proxy ist umgangen.
+      // Backend-Port 8001 entspricht php artisan serve (legacy Host-Workflow).
       '/api': 'http://localhost:8001'
     }
   },

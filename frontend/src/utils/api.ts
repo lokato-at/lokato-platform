@@ -13,7 +13,9 @@ export function buildApiUrl(path: string): string {
     return normalizedPath;
   }
 
-  if (normalizedPath.startsWith('/stream/')) {
+  // Stream-Pfade liegen unter /api/, nicht unter /api/v1/. Path-Boundary
+  // regex matcht /stream, /stream/, /stream?…, aber NICHT /stream-foo o.ae.
+  if (/^\/stream(?:\/|$|\?)/.test(normalizedPath)) {
     return rawApiBaseUrl.replace(/\/v1$/, '') + normalizedPath;
   }
 

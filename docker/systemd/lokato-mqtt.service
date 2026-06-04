@@ -1,0 +1,27 @@
+[Unit]
+Description=Lokato MQTT Subscriber (Laravel Artisan)
+After=network-online.target mosquitto.service mysql.service
+Wants=network-online.target
+# Wenn MQTT-Broker oder MySQL nicht da sind, wartet phpmqtt eh in seiner
+# Reconnect-Schleife — die After=-Eintraege beschleunigen nur den ersten Start.
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/lokato/backend
+ExecStart=/usr/bin/php artisan mqtt:subscribe
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lokato-mqtt
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

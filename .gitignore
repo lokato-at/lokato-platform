@@ -160,3 +160,4 @@ docker/mosquitto/log/mosquitto.log
 
 
 docker/mosquitto/log/mosquitto.log
+frontend/.env

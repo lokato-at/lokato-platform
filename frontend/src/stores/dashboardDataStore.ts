@@ -106,7 +106,15 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
         connectSSE() {
             if (this.sse) return;
 
-            this.sse = new EventSource(buildApiUrl("/stream/dashboard"));
+            // Bei einem manuell konstruierten Reconnect (nach stream.draining)
+            // setzt der Browser den Last-Event-ID-Header NICHT — der greift nur
+            // beim browser-internen Auto-Retry. Wir reichen die Cursor-Position
+            // deshalb explizit als Query-Param weiter; das Backend liest sie in
+            // SseStreamController::resolveStreamCursor.
+            const params = new URLSearchParams();
+            if (this.lastEventId) params.set("last_event_id", this.lastEventId);
+            const qs = params.toString();
+            this.sse = new EventSource(buildApiUrl(qs ? `/stream?${qs}` : "/stream"));
 
             this.sse.onopen = () => {
                 this.sseConnected = true;

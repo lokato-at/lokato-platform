@@ -5,13 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DeviceScanRequest;
 use App\Services\ScanIngestService;
+use App\Support\SseChangeSignal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
 class DeviceEventController extends Controller
 {
-    public function __construct(private readonly ScanIngestService $scanIngestService)
-    {
+    public function __construct(
+        private readonly ScanIngestService $scanIngestService,
+        private readonly SseChangeSignal $sseChangeSignal,
+    ) {
     }
 
     public function store(DeviceScanRequest $request): JsonResponse
@@ -37,6 +40,8 @@ class DeviceEventController extends Controller
                 'message' => 'Gerät oder Kind konnte nicht gefunden werden.',
             ], 404);
         }
+
+        $this->sseChangeSignal->bump();
 
         return response()->json([
             'status' => 'ok',

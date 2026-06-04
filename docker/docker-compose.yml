@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: admin
-      MYSQL_DATABASE: lokato_db        
+      MYSQL_DATABASE: lokato_db
       MYSQL_USER: admin
       MYSQL_PASSWORD: admin
       TZ: Europe/Vienna
@@ -19,13 +19,18 @@ services:
       - lokato_db_data:/var/lib/mysql
       # All .sql/.sh files in this folder will be executed on first startup
       - ./sql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-padmin"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: lokato-phpmyadmin
     restart: unless-stopped
     environment:
-      PMA_HOST: db          
+      PMA_HOST: db
       PMA_USER: admin
       PMA_PASSWORD: admin
       PMA_ABSOLUTE_URI: http://localhost:8090/
@@ -44,6 +49,66 @@ services:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t healthcheck -m ping -q 0 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  php-fpm:
+    build:
+      context: ./php-fpm
+    image: lokato/php-fpm:dev
+    container_name: lokato-php-fpm
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ../backend:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      # php-fpm-Ping per cgi-fcgi waere sauber, ist aber im Image nicht da.
+      # Simpler: pruefe ob der TCP-Port belegt ist.
+      test: ["CMD-SHELL", "php -r \"exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: lokato-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../backend:/var/www/html:ro
+    depends_on:
+      - php-fpm
+    extra_hosts:
+      # `host.docker.internal` zeigt aus dem Container auf den Host. Auf
+      # Docker Desktop (Win/Mac) automatisch da; unter Linux brauchts
+      # host-gateway als Mapping.
+      - "host.docker.internal:host-gateway"
+
+  mqtt-subscriber:
+    image: lokato/php-fpm:dev
+    container_name: lokato-mqtt-subscriber
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ["php", "artisan", "mqtt:subscribe"]
+    volumes:
+      - ../backend:/var/www/html
+    depends_on:
+      php-fpm:
+        condition: service_started
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
 
 volumes:
   lokato_db_data:

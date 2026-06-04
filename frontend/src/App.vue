@@ -33,31 +33,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue";
+import { computed } from "vue";
 import { useRoute } from "vue-router";
 
 const route = useRoute();
 const isTabletRoute = computed(() => route.path.startsWith("/tablet"));
-const time = ref("");
-let intervalId: ReturnType<typeof setInterval> | null = null;
-
-function updateClock() {
-  const now = new Date();
-  time.value = now.toLocaleTimeString("de-DE", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-onMounted(() => {
-  updateClock();
-  intervalId = setInterval(updateClock, 1000);
-});
-
-onUnmounted(() => {
-  if (intervalId) clearInterval(intervalId);
-});
 </script>
 
 <style scoped>

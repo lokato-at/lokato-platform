@@ -76,7 +76,14 @@ export const useRoomTabletStore = defineStore("roomTabletStore", {
       this.disconnectSSE();
 
       this.roomId = roomId;
-      this.sse = new EventSource(buildApiUrl(`/stream/room/${roomId}`));
+
+      // Last-Event-ID als Query-Param weiterreichen — Browser setzt den Header
+      // nicht bei manuell konstruierten Reconnects (nach stream.draining).
+      // Initial-Snapshot beim Reconnect ist semantisch ok (handleOccupancyUpdate
+      // ueberschreibt idempotent).
+      const params = new URLSearchParams({ room: String(roomId), initial: "1" });
+      if (this.lastEventId) params.set("last_event_id", this.lastEventId);
+      this.sse = new EventSource(buildApiUrl(`/stream?${params.toString()}`));
 
       this.sse.onopen = () => {
         this.sseConnected = true;

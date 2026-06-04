@@ -52,13 +52,11 @@ Route::prefix('v1')->group(function () {
 });
 
 
-Route::prefix('stream')->group(function () {
-    // Globaler Dashboard-Stream (alle Räume, Bewegungen, Alarme)
-    Route::get('/dashboard', [SseStreamController::class, 'dashboard']);
-
-    // Raum-spezifischer Stream (nur ein Raum, nur Occupancy + Alerts)
-    Route::get('/room/{room}', [SseStreamController::class, 'room']);
-});
+// Einziger SSE-Endpoint. Query-Params steuern Modus:
+//   GET /api/stream                       → Dashboard (alle Räume)
+//   GET /api/stream?room=3&initial=1      → Raumtablet (auf Raum 3 gescopet,
+//                                            mit initialem Occupancy-Snapshot)
+Route::get('/stream', [SseStreamController::class, 'stream']);
 
 
 Route::get('/health', [DiagnosticsController::class, 'health']);

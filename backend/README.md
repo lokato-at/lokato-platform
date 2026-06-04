@@ -1,300 +1,157 @@
-# 📦 Lokato Platform – Backend (Laravel)
+# Lokato Backend (Laravel 12)
 
-Ein Backend-System zur **Erfassung, Anzeige und Auswertung von Kinderbewegungen** innerhalb eines Horts.
-Das Backend basiert auf **Laravel 11/12** und stellt eine vollständige REST-API bereit.
-
----
-
-## 🚀 Features
-
-### 🔹 Hauptfunktionen
-
-* **RFID-Scan Verarbeiten**
-  `/api/v1/scan` nimmt Geräte-Events entgegen und speichert Bewegungen atomar.
-
-* **Kinder-Standorte in Echtzeit**
-  `/api/v1/children` liefert den aktuellen Raum eines jeden Kindes.
-
-* **Raumbelegung + Kapazitäten**
-  `/api/v1/rooms`, `/api/v1/rooms/{id}/occupancy`
-
-* **Bewegungslog (Historie)**
-  `/api/v1/movement-log` + Filter + Pagination
-
-### 🔹 Admin-Funktionen (CRUD)
-
-* `/api/v1/admin/children`
-* `/api/v1/admin/rooms`
-* `/api/v1/admin/devices`
-
-
-
-### 🔹 Geräteverwaltung
-
-* Jedes Gerät besitzt einen **device_key**, z.B. `raspberry_2`
-* Geräte können unabhängig vom Standort getauscht werden
-* `last_seen` zeigt an, ob Gerät aktiv ist
-
-### 🔹 Logging
-
-Eigener Log-Channel für Scanner- und MQTT-Scan-Logs:
-
-```
-storage/logs/scan.log
-```
+Backend-spezifische Quick-Reference. Für Setup-Anleitungen (Dev/Prod) bitte das **Root-`README.md`** lesen — diese Datei dokumentiert nur die Backend-internen Konventionen.
 
 ---
 
-# 🔧 Requirements
-
-* PHP **>= 8.2**
-* Composer
-* MySQL
-* Node.js + npm
-* OpenSSL & intl (für Laravel)
-* Optional: Redis für Cache/Queue
-
----
-
-# 🛠 Installation (Local Development)
-
-## 1. Repository klonen
-
-```bash
-git clone https://github.com/dein-repo/lokato-platform-backend.git
-cd lokato-platform-backend
-```
-
-## 2. Abhängigkeiten installieren
-
-### PHP
-
-```bash
-composer install
-```
-
-### Node (Assets – optional)
-
-```bash
-npm install
-```
-
-## 3. `.env` anlegen
-
-```bash
-cp .env.example .env
-```
-
-## 4. App Key generieren
-
-```bash
-php artisan key:generate
-```
-
----
-
-# 🔐 Beispiel-ENV
-
-```env
-APP_NAME=Lokato
-APP_ENV=local
-APP_KEY=
-APP_DEBUG=true
-APP_URL=http://localhost:8001
-
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=lokato_db
-DB_USERNAME=root
-DB_PASSWORD=
-
-FILESYSTEM_DISK=public
-LOG_CHANNEL=stack
-```
-
----
-
-# 🗄 Datenbank vorbereiten
-
-### Migrationen
-
-```bash
-php artisan migrate
-```
-
-### Speicher für Uploads verlinken
-
-```bash
-php artisan storage:link
-```
-
-Jetzt sind Dateien unter
-`storage/app/public/...` → erreichbar über `/storage/...`
-
----
-
-# 🧪 Feature Tests ausführen
-
-```bash
-php artisan test
-```
-
-Damit `RefreshDatabase` funktioniert, solltest du eine Test-DB haben:
-
-In `phpunit.xml`:
-
-```xml
-<env name="DB_DATABASE" value="lokato_test"/>
-```
-
----
-
-# 📡 API-Endpoints
-
-## 📍 Scan (Scanner-Schnittstelle)
-
-### POST `/api/v1/scan`
-
-Body:
-
-```json
-{
-  "device_key": "raspberry_1",
-  "tracker_uid": "TAG-0010",
-  "event_time": "2025-11-17T14:30:00+01:00"
-}
-```
-
-Antwort:
-
-```json
-{
-  "status": "ok",
-  "movement": { ... }
-}
-```
-
----
-
-## 🧒 Kinder-API
-
-* `GET /api/v1/children`
-* `GET /api/v1/children/{id}`
-* `GET /api/v1/children/{id}/movement-log`
-
----
-
-## 🏠 Räume
-
-* `GET /api/v1/rooms`
-* `GET /api/v1/rooms/{id}/occupancy`
-
----
-
-## 🔧 Admin-API (CRUD)
-
-**Geschützt via Middleware (optional):**
+## Code-Layout (Kurzüberblick)
 
 ```
-/api/v1/admin/children
-/api/v1/admin/rooms
-/api/v1/admin/devices
+app/
+├── Console/Commands/
+│   ├── MqttSubscribeCommand.php      MQTT-Listener; ruft ScanIngestService
+│   ├── DailyActiveResetCommand.php   Setzt children.is_active=0 (Cron)
+│   └── MqttScanListener.php          Legacy-Debug-Command (nicht produktiv)
+├── Http/Controllers/Api/
+│   ├── SseStreamController.php       Einziger SSE-Endpoint /api/stream
+│   ├── DeviceEventController.php     REST-Scan-Fallback /api/v1/scan
+│   ├── ChildrenController.php        Children-Listing + Checkout
+│   ├── RoomsController.php           Rooms + Occupancy
+│   ├── MovementLogController.php     Bewegungs-Historie
+│   ├── DiagnosticsController.php     /api/health, /api/readiness
+│   └── Admin/                        Admin-CRUD (Children/Rooms/Devices/Summary)
+├── Http/Requests/
+│   └── DeviceScanRequest.php         Validation für REST-Scan
+├── Models/
+│   ├── Child, Room, Device           Kern-Entities
+│   ├── ChildLocation                 aktueller Raum eines Kindes
+│   ├── MovementLog                   Bewegungs-Verlauf (append-only)
+│   ├── Alert                         Warnungen
+│   └── AppRuntimeState               Key/Value-Store (z. B. last_daily_reset_at)
+├── Services/
+│   └── ScanIngestService.php         ⚠ FACHLICHER KERN — nicht anfassen
+└── Support/
+    ├── AppLogger.php                 Strukturiertes Logging mit Sanitization
+    ├── OccupancySnapshotBuilder.php  Aggregations-Queries pro Raum
+    └── SseChangeSignal.php           Cache-Wakeup für SSE-Loops
 ```
 
-Kinder-Foto Upload:
+## Routen-Übersicht (`routes/api.php`)
 
-```
-multipart/form-data
-photo: file
-```
+| Methode | Pfad | Controller |
+|---|---|---|
+| POST | `/api/v1/scan` | `DeviceEventController@store` |
+| GET | `/api/v1/children` | `ChildrenController@index` |
+| GET | `/api/v1/children/{child}` | `ChildrenController@show` |
+| POST | `/api/v1/children/{child}/checkout` | `ChildrenController@checkout` |
+| GET | `/api/v1/movement-log` | `MovementLogController@index` |
+| GET | `/api/v1/children/{child}/movement-log` | `MovementLogController@byChild` |
+| GET | `/api/v1/rooms` | `RoomsController@index` |
+| GET | `/api/v1/rooms/{room}/occupancy` | `RoomsController@occupancy` |
+| GET | `/api/v1/admin/summary` | `Admin\AdminSummaryController` |
+| GET/POST/PUT/DELETE | `/api/v1/admin/{children,rooms,devices}` | `Admin\…AdminController` (apiResource) |
+| GET | `/api/stream[?room=X&initial=1&last_event_id=…]` | `SseStreamController@stream` |
+| GET | `/api/health` / `/api/readiness` / `/api/diagnostics` | `DiagnosticsController` |
 
----
+## SSE-Endpoint (Phase-2-Refactor)
 
-# 📥 Logging
+Ein einziger Endpoint, drei Modi gesteuert über Query-Params:
 
-## Custom-Scanner-Log
+| URL | Modus | Sichtbare Events |
+|---|---|---|
+| `/api/stream` | Dashboard (alle Räume) | `child.moved`, `room.occupancy.updated` (alle Räume), `room.alert.raised` (alle) |
+| `/api/stream?room=3&initial=1` | Raumtablet (gescopet auf Raum 3) | `child.moved` (nur Raum 3), `room.occupancy.updated` (Raum 3), `room.alert.raised` (Raum 3); plus 1× initial `room.occupancy.updated` direkt nach Connect |
+| `/api/stream?last_event_id=movement:42;alert:5` | Reconnect-Modus | wie Dashboard, aber resumed ab Cursor |
 
-Ein eigener Channel speichert alle Scan-Events inkl. MQTT-Scan-Diagnostik (Erfolg + Fehler):
+Loop-Verhalten:
+- 500 ms-Polling, **aber** mit Cache-Gate (`SseChangeSignal::lastChangeAt()`). Solange seit dem letzten Tick kein Scan eingegangen ist, werden die DB-Queries übersprungen → **Idle-DB-Last = 0**.
+- Heartbeat-Kommentar (`: heartbeat …`) alle 15 s, damit Proxies die Verbindung nicht killen.
+- Auto-Drain via `stream.draining`-Event nach `SSE_MAX_CONNECTION_SECONDS` (default 60). Client soll danach reconnecten.
 
-`config/logging.php`:
+Cache-Bump-Aufrufer (genau zwei Stellen — `ScanIngestService` bleibt unangetastet):
+- `MqttSubscribeCommand:236` nach erfolgreichem `ingestScan()`
+- `DeviceEventController:43` nach erfolgreichem `ingestScan()`
 
+## Logging
+
+Custom-Channels in `config/logging.php`:
+
+| Channel | Datei | Wofür |
+|---|---|---|
+| `scan` | `storage/logs/scan.log` | MQTT-Events, Scan-Diagnostik, DB-Diagnostik (alle `AppLogger`-Komponenten `mqtt`/`scan`/`db`) |
+| `sse` | `storage/logs/sse.log` | SSE-Connect/Disconnect-Events |
+| `cron` | `storage/logs/cron.log` | Daily-Reset-Events |
+| `stack` → `single` | `storage/logs/laravel.log` | Default-Fallback |
+
+Schreibmuster:
 ```php
-'scan' => [
-    'driver' => 'single',
-    'path' => storage_path('logs/scan.log'),
-    'level' => 'info',
-],
+use App\Support\AppLogger;
+
+AppLogger::event('mqtt', 'mqtt_message_received', ['topic' => $topic, 'len' => $len]);
+AppLogger::exception('cron', 'daily_reset_failed', $e, ['reset_date' => $date]);
 ```
 
-Beispiele:
+`AppLogger::CHANNEL_MAP` routet `mqtt|scan|db` → `scan.log`, `sse` → `sse.log`, `cron` → `cron.log`. Sensible Keys (`password`, `secret`, `token`, …) werden automatisch durch `[REDACTED]` ersetzt.
 
-```php
-Log::channel('scan')->warning('Unknown device_key', [...]);
-Log::channel('scan')->info('Scan processed', [...]);
+Verbositäts-Flags in `.env`:
+- `LOG_ENABLED=true|false` (Master-Schalter; `error`/`critical` werden trotzdem geloggt)
+- `LOG_FORMAT=pretty|json`
+- `MQTT_DIAGNOSTIC_LOGS`, `SCAN_DIAGNOSTIC_LOGS`, `CRON_LOGS`, `DB_DIAGNOSTIC_LOGS` (für jeweils zusätzliche Debug-Events)
+- `LOG_LEVEL=info|debug|warning|error`
+
+## Wichtige `.env`-Variablen
+
+| Bereich | Variablen | Anmerkung |
+|---|---|---|
+| App | `APP_KEY`, `APP_URL`, `APP_ENV`, `APP_DEBUG`, `APP_TIMEZONE` | `APP_KEY` per `php artisan key:generate` |
+| DB | `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | **Compose: `DB_HOST=db`**, Pi: `DB_HOST=127.0.0.1`, Host-Mode-Dev: `127.0.0.1` |
+| MQTT | `MQTT_HOST`, `MQTT_PORT`, `MQTT_TOPIC_SCAN`, `MQTT_CLIENT_ID`, `MQTT_QOS` | **Compose: `MQTT_HOST=mqtt`**, Pi: `127.0.0.1` |
+| MQTT-Auth | `MQTT_AUTH_USERNAME`, `MQTT_AUTH_PASSWORD` | **`=null` schreiben (nicht leer lassen)**, sonst crasht php-mqtt-Client |
+| MQTT-Reconnect | `MQTT_AUTO_RECONNECT_ENABLED`, `_MAX_ATTEMPTS`, `_DELAY` | sinnvolle Defaults in `.env.raspi.example` |
+| Driver | `SESSION_DRIVER`, `CACHE_STORE`, `QUEUE_CONNECTION` | alle drei auf `database` (kein Redis im Setup) |
+| API | `API_SLOW_REQUEST_MS`, `SSE_MAX_CONNECTION_SECONDS` | Performance-Limits |
+| Diag | `DIAGNOSTICS_ENABLED` | aktiviert `/api/diagnostics` |
+
+Templates:
+- `.env.example` — Host-Mode-Dev (lokales `php artisan serve`)
+- `.env.raspi.example` — Pi-Prod (native apt-Installation)
+
+## Artisan-Befehle
+
+| Befehl | Wofür |
+|---|---|
+| `php artisan migrate --force` | Migrations einspielen (Pi-Prod: `--force` zwingend) |
+| `php artisan db:seed --force` | Demo-Daten (3 Räume, 36 Kinder, 3 Devices) |
+| `php artisan mqtt:subscribe` | MQTT-Subscriber als Vordergrund-Prozess (auf dem Pi via systemd) |
+| `php artisan mqtt:subscribe --once --debug` | Genau einen Scan verarbeiten + ausführliches Logging |
+| `php artisan children:daily-active-reset` | Manueller Daily-Reset (Cron oder Test) |
+| `php artisan key:generate --force` | `APP_KEY` neu setzen |
+| `php artisan config:clear` / `config:cache` | Config-Cache leeren/bauen — **zwingend nach jeder `.env`-Änderung** |
+| `php artisan route:list` | Alle Routen + Controller |
+| `php artisan tinker` | REPL — z. B. `App\Models\Child::count()` |
+
+## Daily-Reset (Cron)
+
+`DailyActiveResetCommand` (`children:daily-active-reset`) setzt alle `children.is_active` auf `false` und merkt sich Datum + Zeit in `app_runtime_state`. Loggt `daily_reset_started` / `daily_reset_finished` / `daily_reset_failed` in `cron.log`.
+
+Schedule-Definition liegt in `routes/console.php` (Laravel-Scheduler `dailyAt('01:00')` Europe/Vienna). Damit das tatsächlich ausgelöst wird, muss System-Cron minütlich `php artisan schedule:run` aufrufen. Die vollständige Setup-Anleitung steht im **Root-`README.md` → Abschnitt „Cron-Jobs auf dem Pi"**.
+
+Manuell triggern (z. B. zum Testen):
+```bash
+sudo -u www-data php /var/www/lokato/backend/artisan children:daily-active-reset
 ```
 
----
+## Tests
 
-# 🚀 Deployment (Production)
-
-1. Repo pullen
-2. `.env` für Prod anpassen
-   `APP_DEBUG=false`
-3. Composer install *ohne dev*:
-
-   ```bash
-   composer install --optimize-autoloader --no-dev
-   ```
-4. Optimierungen:
-
-   ```bash
-   php artisan config:cache
-   php artisan route:cache
-   php artisan view:cache
-   ```
-5. Migrationen:
-
-   ```bash
-   php artisan migrate --force
-   ```
-6. Storage-Link (falls noch nicht vorhanden):
-
-   ```bash
-   php artisan storage:link
-   ```
-
-### Rechte
-
-PHP muss Schreibrechte auf folgende Ordner haben:
-
-```
-storage/
-bootstrap/cache/
+```bash
+php artisan test                  # Feature-Suite
+php artisan test --filter Scan    # Nur Scan-Tests
 ```
 
+## Was NICHT anfassen
 
+- `app/Services/ScanIngestService.php` — fachlicher Kern, atomare Transaktion mit Lock-for-Update
+- Modell-Geschäftsregeln (`Child`, `Room`, `ChildLocation`, `MovementLog`, `Alert`)
+- `MqttSubscribeCommand`-Validierung — strukturelle Logik bleibt; einzige zugelassene Erweiterung: `SseChangeSignal::bump()`-Aufruf nach erfolgreichem Ingest
 
----
-
-# 🧯 Troubleshooting
-
-### ❗ Geräte werden nicht erkannt
-
-* device_key stimmt nicht?
-* Gerät nicht in DB?
-* Raum nicht zugewiesen?
-
-### ❗ Kinder haben keinen Raum
-
-Prüfen:
-
-* child_locations-Eintrag vorhanden?
-* letzter Scan ist älter als aktueller?
-
-### ❗ Uploads funktionieren nicht
-
-* `php artisan storage:link`
-* Schreibrechte auf `storage/app/public`
-
----
+Siehe `../CLAUDE.md` für die vollständige Liste der Architekturentscheidungen.

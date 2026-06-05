@@ -285,7 +285,7 @@ Erwartetes Verhalten:
 
 ## Cron-Jobs auf dem Pi
 
-> ⚠️ **Wichtig — Setup-Status:** `start-prod-raspi.sh` legt die Cron-Jobs **nicht** automatisch an. Nach dem Setup-Lauf laufen weder der Daily-Reset noch das Log-Audit. Du musst diesen Abschnitt **einmal manuell durcharbeiten**, sonst bleibt `children.is_active` für immer auf `true` und das Log-Audit nie ausgeführt.
+> ✅ **Wird automatisch eingerichtet.** `start-prod-raspi.sh` legt seit Phase-4-Ergänzung die vier Crontab-Einträge für `www-data` idempotent an (zwischen Markern, sodass spätere Skript-Läufe oder eigene Einträge erhalten bleiben). Dieser Abschnitt erklärt was läuft und wie du es prüfst.
 
 Es gibt **zwei voneinander unabhängige** Cron-Aufgaben:
 
@@ -298,40 +298,28 @@ Schedule::call(function () {
 })->dailyAt('01:00')->timezone(env('APP_TIMEZONE', 'Europe/Vienna'));
 ```
 
-Der Reset setzt alle `children.is_active` auf `false`. Loggt `daily_reset_finished` nach `storage/logs/cron.log`. Aber: damit Laravel diese Definition triggert, muss System-Cron **minütlich** `php artisan schedule:run` aufrufen.
+Der Reset setzt alle `children.is_active` auf `false`. Loggt `daily_reset_finished` nach `storage/logs/cron.log`. Damit Laravel das automatisch triggert, ruft System-Cron **minütlich** `php artisan schedule:run` auf — Laravel selbst entscheidet dann, ob etwas zu tun ist.
 
 ### Aufgabe 2: Log-Audit (prüft die Laravel-Logs)
 
 `tools/log_audit/log_audit.py` prüft die vier Log-Dateien (`scan.log`, `cron.log`, `laravel.log`, `sse.log`) auf erwartete Patterns. Wird von `start-prod-raspi.sh` automatisch nach `/var/www/lokato/tools/log_audit/` mitdeployed.
 
-### Einmaliges Setup beider Aufgaben
+### Die vier installierten Crontab-Einträge
 
-Schritt 1 — Log-Verzeichnis vorbereiten (sollte schon existieren, sicherheitshalber):
-```bash
-sudo mkdir -p /var/log/lokato
-sudo chown www-data:www-data /var/log/lokato
-```
-
-Schritt 2 — Crontab für `www-data` editieren:
-```bash
-sudo crontab -e -u www-data
-```
-
-(Beim ersten Aufruf den Editor wählen — `nano` ist okay.)
-
-Schritt 3 — Diese vier Einträge einfügen:
+`start-prod-raspi.sh → configure_cron()` schreibt diesen Block in `www-data`s crontab:
 
 ```cron
-# === Laravel Scheduler (triggert routes/console.php — u.a. Daily-Reset 01:00) ===
+# >>> lokato managed cron block -- do not edit between markers >>>
+# Laravel-Scheduler -- triggert routes/console.php (u.a. Daily-Reset 01:00 Vienna)
 * * * * * cd /var/www/lokato/backend && /usr/bin/php artisan schedule:run >> /var/log/lokato/scheduler.log 2>&1
-
-# === Log-Audit ===
+# Log-Audit (Daily / Weekly / Cleanup)
 10 6 * * * cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period daily  --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
 20 6 * * 1 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period weekly --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
 30 3 * * 0 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py cleanup        --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
+# <<< lokato managed cron block <<<
 ```
 
-Speichern (in nano: `Strg+O`, Enter, `Strg+X`).
+Der Block ist durch die Marker `>>> lokato managed cron block …` und `<<< lokato managed cron block <<<` umschlossen. Bei wiederholten Setup-Läufen wird der **Block zwischen den Markern komplett ersetzt** — Crontab-Einträge **außerhalb** der Marker (z. B. manuelle Backup-Jobs) bleiben unangetastet.
 
 ### Was die einzelnen Zeilen tun
 

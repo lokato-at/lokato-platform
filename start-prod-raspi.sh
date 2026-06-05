@@ -374,6 +374,45 @@ deploy_frontend() {
     ok "Frontend deployt."
 }
 
+# ----- 10b) Cron-Jobs fuer www-data anlegen (idempotent) --------------------
+configure_cron() {
+    info "Cron-Jobs fuer www-data einrichten (Scheduler + Log-Audit)..."
+
+    # Marker-Pattern bewusst ohne Shell-Sonderzeichen, damit sed sauber loescht.
+    local marker_start=">>> lokato managed cron block -- do not edit between markers >>>"
+    local marker_end="<<< lokato managed cron block <<<"
+
+    # Sicherstellen, dass /var/log/lokato existiert (legt configure_php_fpm
+    # eigentlich an, aber configure_cron kann auch unabhaengig laufen).
+    sudo mkdir -p "$LOG_DIR"
+    sudo chown www-data:www-data "$LOG_DIR"
+
+    # Bestehende crontab lesen (leer ist OK), Block zwischen Markern entfernen.
+    local existing
+    existing="$(sudo crontab -l -u www-data 2>/dev/null || true)"
+    local cleaned
+    cleaned="$(printf '%s\n' "$existing" | sed "/$marker_start/,/$marker_end/d")"
+
+    # Neuen Block anhaengen.
+    local new_crontab
+    new_crontab="$(cat <<EOF
+$cleaned
+# $marker_start
+# Laravel-Scheduler -- triggert routes/console.php (u.a. Daily-Reset 01:00 Vienna)
+* * * * * cd /var/www/lokato/backend && /usr/bin/php artisan schedule:run >> /var/log/lokato/scheduler.log 2>&1
+# Log-Audit (Daily / Weekly / Cleanup)
+10 6 * * * cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period daily  --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
+20 6 * * 1 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period weekly --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
+30 3 * * 0 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py cleanup        --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
+# $marker_end
+EOF
+)"
+
+    # Neue crontab schreiben.
+    printf '%s\n' "$new_crontab" | sudo crontab -u www-data -
+    ok "Crontab fuer www-data aktualisiert (idempotent — Block zwischen Markern)."
+}
+
 # ----- 11) Services finalisieren --------------------------------------------
 finalize_services() {
     local php_ver
@@ -440,6 +479,7 @@ prepare_deploy_dirs
 deploy_backend
 deploy_tools
 deploy_frontend
+configure_cron
 finalize_services
 
 print_summary

@@ -13,7 +13,7 @@
 #   ./start-prod-raspi.sh
 #
 # Wichtige Env-Variablen (optional):
-#   PI_IP=192.168.1.50           Statische IP, die der Pi bekommen soll
+#   PI_IP=192.168.1.100          Statische IP, die der Pi bekommen soll
 #   INSTALL_DEPS=0               apt-Block ueberspringen (bei wiederholtem Run)
 #   CONFIG_NETWORK=0             IP-Konfiguration ueberspringen
 #   DB_PASSWORD=changeme         Passwort fuer den Laravel-DB-User
@@ -35,7 +35,7 @@ LOG_DIR="/var/log/lokato"
 
 # PI_IP ist die statische Adresse, die der Pi annehmen soll. Wenn das Netz
 # DHCP-only ist, setze CONFIG_NETWORK=0 und nimm die Router-vergebene IP.
-PI_IP="${PI_IP:-192.168.1.50}"
+PI_IP="${PI_IP:-192.168.1.100}"
 PI_GATEWAY="${PI_GATEWAY:-192.168.1.1}"
 PI_DNS="${PI_DNS:-192.168.1.1 1.1.1.1}"
 PI_NETMASK_CIDR="${PI_NETMASK_CIDR:-24}"

@@ -44,7 +44,7 @@ src/
 |---|---|---|
 | `VITE_API_BASE_URL` | `/api/v1` | Same-Origin-Pfad (relative URL). Beim Compose-Setup geht das via nginx an Laravel; in Dev mit direkter Vite-Verbindung (`http://localhost:5173`) übernimmt der Vite-Proxy aus `vite.config.ts` das Routing. |
 
-Wenn du gegen ein Remote-Backend testen willst, kannst du `VITE_API_BASE_URL=http://192.168.1.50/api/v1` setzen — dann sind die Calls absolut.
+Wenn du gegen ein Remote-Backend testen willst, kannst du `VITE_API_BASE_URL=http://192.168.1.100/api/v1` setzen — dann sind die Calls absolut.
 
 Templates:
 - `.env.example` — Default für Win-Dev und Compose

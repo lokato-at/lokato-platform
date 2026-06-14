@@ -87,26 +87,41 @@ Komplette Reihenfolge — jeder Schritt einmal ausführen:
 git clone https://github.com/lokato-at/lokato-platform.git
 cd lokato-platform
 
-# 2) Backend-Stack im Docker hochfahren (MySQL, Mosquitto, phpMyAdmin, nginx, php-fpm, MQTT-Subscriber)
+# 2) backend\.env aus Template anlegen (existiert nach git clone NICHT)
+Copy-Item backend\.env.example backend\.env
+
+# 3) ⚠️ ZWEI Zeilen in backend\.env auf Compose-Werte umstellen — sonst
+#    schlägt jeder API-Request mit "Connection refused" fehl:
+#      DB_HOST=db        (statt 127.0.0.1)
+#      MQTT_HOST=mqtt    (statt 127.0.0.1)
+#    Editor öffnen und ändern:
+notepad backend\.env
+
+# 4) Backend-Stack im Docker hochfahren (MySQL, Mosquitto, phpMyAdmin, nginx, php-fpm, MQTT-Subscriber)
 #    Beim ersten Lauf ~2 Min für den php-fpm-Image-Build
 cd docker
 docker compose up -d
 cd ..
 
-# 3) Backend-Dependencies installieren (vendor/ existiert sonst nicht)
+# 5) Backend-Dependencies installieren (vendor/ existiert sonst nicht)
 docker compose -f docker/docker-compose.yml exec php-fpm composer install
 
-# 4) Datenbank-Migrationen + Seeds einspielen
+# 6) APP_KEY generieren (sonst: "No application encryption key has been specified")
+docker compose -f docker/docker-compose.yml exec php-fpm php artisan key:generate
+
+# 7) Datenbank-Migrationen + Seeds einspielen
 docker compose -f docker/docker-compose.yml exec php-fpm php artisan migrate --force
 docker compose -f docker/docker-compose.yml exec php-fpm php artisan db:seed --force
 
-# 5) In einem ZWEITEN Terminal: Vue-Dev-Server starten
+# 8) In einem ZWEITEN Terminal: Vue-Dev-Server starten
 cd frontend
 npm install
 npm run dev
 ```
 
 App-URL: **http://localhost** (nicht :5173 — siehe Troubleshooting).
+
+> ⚠️ **Warum Schritt 3 zwingend ist:** `backend/.env.example` ist auf Host-Mode-Defaults (`DB_HOST=127.0.0.1`) — das passt zum Legacy `start-dev.ps1`-Workflow. Für den empfohlenen Compose-Workflow musst du nach jedem frischen `Copy-Item` exakt zwei Werte ändern. Es gibt **kein** dediziertes Compose-Template (bewusste Entscheidung — weniger Files, ein klarer Stolperstein).
 
 ### Routing-Topologie im Compose-Setup
 
@@ -123,18 +138,20 @@ Browser → http://localhost (Port 80)
 
 **Wenn `npm run dev` nicht läuft**, gibt nginx 502 für `/` zurück — Vite-Dev im frontend/-Verzeichnis starten.
 
-### ⚠️ `backend/.env` für Compose-Mode vorbereiten
+### `backend/.env` — die zwei Werte, die zwischen Workflows abweichen
 
-Wenn du den Compose-Stack (`docker compose up`) nutzt, läuft Laravel **im Container**. Aus Container-Sicht sind `127.0.0.1` und Docker-Service-Namen zwei verschiedene Adressen — der bekannteste Stolperstein. Prüfe diese sechs Werte in `backend/.env`:
+`backend/.env.example` ist auf Host-Mode-Defaults. Wenn du Compose nutzt, müssen genau diese **zwei** Zeilen umgestellt werden:
 
-| Variable | Falsch (Host-Mode) | Richtig (Compose-Mode) | Symptom bei falsch |
+| Variable | Host-Mode (Default in Template) | Compose-Mode | Symptom bei falsch |
 |---|---|---|---|
 | `DB_HOST` | `127.0.0.1` | `db` | `SQLSTATE[HY000] [2002] Connection refused` bei jedem Request, `php artisan migrate` schlägt fehl |
 | `MQTT_HOST` | `127.0.0.1` | `mqtt` | `mqtt-subscriber` Container läuft in Crash-Loop, MQTT-Events kommen nie an |
-| `SESSION_DRIVER` | `redis` | `database` | Cache/Session-Writes failen (kein Redis-Container im Stack) |
-| `CACHE_STORE` | `redis` | `database` | dito |
-| `QUEUE_CONNECTION` | `redis` | `database` | dito |
-| `MQTT_AUTH_USERNAME` / `MQTT_AUTH_PASSWORD` | leer (`=`) | `=null` | `MQTT connection failed: The username may not consist of white space only.` — Laravels `env()` gibt für leere Werte einen leeren String zurück, die php-mqtt/client-Library akzeptiert nur `null` oder einen echten Wert. |
+
+Alles andere im Template ist für beide Workflows korrekt:
+- `MQTT_AUTH_USERNAME=null` / `MQTT_AUTH_PASSWORD=null` (Laravels `env()`-Parser braucht das Wort `null`, leer crasht die php-mqtt/client-Library)
+- `SESSION_DRIVER` / `CACHE_STORE` / `QUEUE_CONNECTION` = `database` (kein Redis-Container im Stack)
+
+**Legacy-Warnung:** falls du eine **alte `.env`** aus einem früheren Stand übernimmst, die noch `SESSION_DRIVER=redis` / `CACHE_STORE=redis` / `QUEUE_CONNECTION=redis` enthält → drei Zeilen auf `database` umstellen. Es gibt keinen Redis-Container im Setup.
 
 Nach jeder `.env`-Änderung **zwingend**:
 ```powershell
@@ -142,7 +159,13 @@ docker compose exec php-fpm php artisan config:clear
 docker compose restart php-fpm mqtt-subscriber
 ```
 
-Wenn du je zurück auf Host-Mode wechselst (`php artisan serve` lokal statt im Container), die `_HOST`-Werte wieder auf `127.0.0.1` zurück. `backend/.env.example` zeigt die Host-Mode-Defaults; `backend/.env.raspi.example` zeigt die Pi-Prod-Defaults (auch `127.0.0.1`, weil Pi nativ).
+**Workflow-Übersicht — welcher `.env`-Wert pro Variante:**
+
+| Workflow | `DB_HOST` | `MQTT_HOST` | Template als Startpunkt |
+|---|---|---|---|
+| Compose (`docker compose up`) | `db` | `mqtt` | `.env.example` + 2 Zeilen umstellen |
+| Host (`start-dev.ps1` / `php artisan serve`) | `127.0.0.1` | `127.0.0.1` | `.env.example` (Default-Stand) |
+| Pi-Prod (nativ) | `127.0.0.1` | `127.0.0.1` | `.env.raspi.example` (kopiert das Setup-Skript automatisch) |
 
 ### Wichtige URLs
 
@@ -171,8 +194,8 @@ Wenn du je zurück auf Host-Mode wechselst (`php artisan serve` lokal statt im C
 git clone https://github.com/lokato-at/lokato-platform.git /home/pi/lokato-platform
 cd /home/pi/lokato-platform
 
-# Falls deine Pi-IP nicht 192.168.1.50 sein soll, hier vor dem Lauf anpassen:
-export PI_IP=192.168.1.50
+# Falls deine Pi-IP nicht 192.168.1.100 sein soll, hier vor dem Lauf anpassen:
+export PI_IP=192.168.1.100
 export PI_GATEWAY=192.168.1.1
 export DB_PASSWORD="ein-starkes-passwort"
 
@@ -221,9 +244,9 @@ Dank Same-Origin steht die IP **nicht** im JS-Bundle. Konsequenz:
 
 | Gerät | Bookmark |
 |---|---|
-| Admin/Dashboard | `http://192.168.1.50/#/dashboard` |
-| Tablet Raum 1 | `http://192.168.1.50/#/tablet/1` |
-| Tablet Raum 2 | `http://192.168.1.50/#/tablet/2` |
+| Admin/Dashboard | `http://192.168.1.100/#/dashboard` |
+| Tablet Raum 1 | `http://192.168.1.100/#/tablet/1` |
+| Tablet Raum 2 | `http://192.168.1.100/#/tablet/2` |
 | ... | ... |
 
 (IP entsprechend ersetzen.)
@@ -540,7 +563,7 @@ systemctl is-active NetworkManager dhcpcd
 ```bash
 sudo nmcli con show                                      # Connections auflisten
 sudo nmcli con mod "Wired connection 1" \
-  ipv4.addresses 192.168.1.50/24 \
+  ipv4.addresses 192.168.1.100/24 \
   ipv4.gateway 192.168.1.1 \
   ipv4.dns "192.168.1.1 1.1.1.1" \
   ipv4.method manual
@@ -552,7 +575,7 @@ sudo nmcli con up "Wired connection 1"
 In `/etc/dhcpcd.conf` ans Ende:
 ```
 interface eth0
-static ip_address=192.168.1.50/24
+static ip_address=192.168.1.100/24
 static routers=192.168.1.1
 static domain_name_servers=192.168.1.1 1.1.1.1
 ```

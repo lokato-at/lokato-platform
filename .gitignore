@@ -67,6 +67,7 @@ $RECYCLE.BIN/
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
+!frontend/.env.raspi.example
 
 # Logs
 npm-debug.log*
@@ -101,6 +102,7 @@ backend/composer.phar
 backend/.env
 backend/.env.*
 !backend/.env.example
+!backend/.env.raspi.example
 backend/.env.backup
 
 # Storage & Cache 

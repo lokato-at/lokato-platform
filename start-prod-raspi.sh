@@ -393,16 +393,30 @@ configure_cron() {
     local cleaned
     cleaned="$(printf '%s\n' "$existing" | sed "/$marker_start/,/$marker_end/d")"
 
+    # MAILTO-Zeile: nur wenn ALERT_EMAIL env-Var beim Skript-Aufruf gesetzt ist.
+    # Cron mailt dann automatisch bei jeder stdout-Ausgabe (also bei Anomalien,
+    # weil die Audit-Befehle ohne >>-Redirect laufen). Lokaler MTA noetig --
+    # z.B. apt install msmtp-mta && msmtprc konfigurieren.
+    local mailto_line=""
+    if [[ -n "${ALERT_EMAIL:-}" ]]; then
+        mailto_line="MAILTO=$ALERT_EMAIL"
+        info "ALERT_EMAIL gesetzt -- cron mailt Anomalien an $ALERT_EMAIL."
+    fi
+
     # Neuen Block anhaengen.
+    # Audit-Befehle nutzen "tee -a" statt ">> 2>&1": stdout bleibt sichtbar fuer
+    # cron, damit MAILTO greift; gleichzeitig wird alles in die log-Datei
+    # archiviert. Cleanup hat keinen Mail-Wert und bleibt mit reinem Redirect.
     local new_crontab
     new_crontab="$(cat <<EOF
 $cleaned
 # $marker_start
+$mailto_line
 # Laravel-Scheduler -- triggert routes/console.php (u.a. Daily-Reset 01:00 Vienna)
 * * * * * cd /var/www/lokato/backend && /usr/bin/php artisan schedule:run >> /var/log/lokato/scheduler.log 2>&1
 # Log-Audit (Daily / Weekly / Cleanup)
-10 6 * * * cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period daily  --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
-20 6 * * 1 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period weekly --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
+10 6 * * * cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period daily  --config tools/log_audit/config.json 2>&1 | tee -a /var/log/lokato/log-audit.log
+20 6 * * 1 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py check --period weekly --config tools/log_audit/config.json 2>&1 | tee -a /var/log/lokato/log-audit.log
 30 3 * * 0 cd /var/www/lokato && /usr/bin/python3 tools/log_audit/log_audit.py cleanup        --config tools/log_audit/config.json >> /var/log/lokato/log-audit.log 2>&1
 # $marker_end
 EOF

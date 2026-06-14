@@ -377,6 +377,35 @@ Exit-Codes vom Log-Audit:
 - `1` — Errors oder fehlgeschlagene Daily-Resets gefunden
 - `2` — Log-Dateien fehlen (Setup unvollständig)
 
+### Mail-Alarmierung bei Anomalien (optional)
+
+`configure_cron()` setzt einen `MAILTO=…`-Header in der Crontab, **wenn** beim Setup-Lauf die Umgebungsvariable `ALERT_EMAIL` gesetzt war:
+
+```bash
+export ALERT_EMAIL="dein.name@example.com"
+./start-prod-raspi.sh
+```
+
+Vorausgesetzt ein lokaler MTA ist installiert (z. B. `sudo apt install msmtp-mta` plus eine `~/.msmtprc` mit Gmail-/Mailbox-SMTP-Credentials), verschickt cron dann automatisch:
+- den **kompletten Audit-Report** wenn das Tool stdout produziert (auch ohne Exit-Fehler)
+- bei Exit-Code ≠ 0 (Anomalien, Crash-Loops, Errors) zusätzlich den Stderr-Inhalt
+
+Wer kein Mail-Setup hat: einfach `ALERT_EMAIL` nicht setzen, dann läuft alles wie vorher (silent in die Log-Datei).
+
+### Was das Audit-Tool jetzt zusätzlich prüft
+
+Seit Juni 2026 erweitert:
+
+| Erweiterung | Was passiert |
+|---|---|
+| **systemd-Status-Check** | `systemctl is-active lokato-mqtt nginx mariadb mosquitto php8.4-fpm` — jeder nicht-aktive Service erzeugt eine Anomalie |
+| **Restart-Counter-Watch** | `systemctl show -p NRestarts` — bei > 10 Restarts (konfigurierbar in `config.json` als `restart_counter_warn_threshold`) wird das als „möglicher Crash-Loop" gemeldet. Hätte unseren 138-Restarts-Vorfall sofort erkannt. |
+| **nginx-Error-Log** (`/var/log/nginx/error.log`) | Patterns `upstream`, `5\d{2}`, `connect() failed`, `no live upstreams`, `emerg`, `alert` |
+| **php-fpm-Log** (`/var/log/lokato/php-fpm.log`) | über generische `errors`/`exception`-Patterns |
+| **Scheduler-Log** (`/var/log/lokato/scheduler.log`) | Patterns `PHP Fatal`, `PHP Parse`, `Uncaught`, `Exception` |
+
+`tools/log_audit/config.json` listet die System-Logs unter `system_log_files` (absolute Pfade), die App-Logs unter `log_files` (relativ).
+
 ### Alternative: Laravel `schedule:work` als systemd-Service
 
 Statt minütlichem System-Cron kann man auch einen Daemon laufen lassen. Vorteile: ein Prozess, in `systemctl status` direkt sichtbar. Nachteile: zusätzlicher Daemon nur für die Scheduler-Schleife.

@@ -55,6 +55,39 @@ Kurzform der Audit-Einträge (in `sudo crontab -e -u www-data`):
 
 Cron-Output landet in `/var/log/lokato/log-audit.log`. `start-prod-raspi.sh` legt `/var/log/lokato/` mit `www-data:www-data` an.
 
+## systemd-Check (Juni-2026-Erweiterung)
+
+Zusätzlich zu den Log-Patterns prüft das Tool den Status der unter `systemd_units` in `config.json` aufgelisteten Services:
+
+```json
+"systemd_units": ["lokato-mqtt", "nginx", "mariadb", "mosquitto", "php8.4-fpm"],
+"restart_counter_warn_threshold": 10
+```
+
+Anomalien (in „Auffaelligkeiten"-Sektion + Exit-Code 1):
+- **Unit nicht active** — z. B. `lokato-mqtt ist failed (erwartet: active)`
+- **NRestarts > Threshold** — z. B. `lokato-mqtt hat 138 Restarts (Schwelle: 10) -- moeglicher Crash-Loop`
+
+Auf Maschinen ohne `systemctl` (z. B. Windows-Dev) wird der Check still übersprungen.
+
+## System-Logs (Juni-2026-Erweiterung)
+
+Zusätzlich zu den Laravel-Logs liest das Tool absolute Pfade aus `system_log_files`:
+
+```json
+"system_log_files": [
+  "/var/log/nginx/error.log",
+  "/var/log/lokato/php-fpm.log",
+  "/var/log/lokato/scheduler.log"
+]
+```
+
+Pattern-Kategorien dafür: `nginx_errors` (5xx, upstream-Fehler) und `scheduler_errors` (PHP Fatal, Uncaught Exceptions).
+
+**Permissions:** nginx-Logs sind in der Regel `640 root:adm`. Damit `www-data` (der cron-User) sie lesen kann, entweder:
+- `sudo usermod -aG adm www-data` (einmalig), oder
+- Cron als root laufen lassen statt als `www-data`
+
 ## Erwartete Patterns
 
 Das Tool sucht (case-insensitive) nach folgenden Strings; jede Trefferzahl wird im Report ausgewiesen:

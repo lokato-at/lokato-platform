@@ -11,6 +11,8 @@ const roomFilter = ref<string>("all");
 const activeFilter = ref<ActiveFilter>("all");
 const editingId = ref<number | null>(null);
 
+const formCardRef = ref<HTMLElement | null>(null);
+
 const form = reactive({
   name: "",
   device_key: "",
@@ -102,6 +104,10 @@ function openEdit(device: AdminDevice) {
   form.device_key = device.device_key ?? "";
   form.room_id = String(device.room_id ?? device.room?.id ?? "");
   form.is_active = activeValue(device) ?? true;
+
+  setTimeout(() => {
+    formCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 50);
 }
 
 function buildPayload() {
@@ -154,7 +160,7 @@ onMounted(async () => {
 
     <p v-if="store.error" class="error">{{ store.error }}</p>
 
-    <section class="form-card">
+    <section ref="formCardRef" class="form-card">
       <h3>{{ editingId ? "Gerät bearbeiten" : "Neues Gerät" }}</h3>
       <form class="form-grid" @submit.prevent="saveDevice">
         <input v-model="form.name" type="text" class="input" placeholder="Name" required />
@@ -217,9 +223,9 @@ onMounted(async () => {
       Keine Geräte gefunden. Passe Suche oder Filter an.
     </div>
 
-    <ul v-else class="device-list">
-      <li v-for="device in filteredDevices" :key="device.id" class="device-item">
-        <div>
+    <ul v-else class="card-list">
+      <li v-for="device in filteredDevices" :key="device.id" class="card">
+        <div class="card-main">
           <p class="title">{{ device.name }}</p>
           <p class="meta">Key: {{ device.device_key || "—" }}</p>
           <p class="meta">Raum: {{ device.room?.name || "Nicht zugeordnet" }}</p>
@@ -244,13 +250,125 @@ onMounted(async () => {
 <style scoped>
 @import '../styles/admin-shared.css';
 
-.toolbar { grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(160px, 220px)); }
-.device-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.device-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
-.badges { display: grid; gap: 6px; justify-items: end; }
-@media (max-width: 960px) {
-  .form-grid, .toolbar { grid-template-columns: 1fr; }
-  .device-item { grid-template-columns: 1fr; align-items: start; }
-  .badges { justify-items: start; }
+.toolbar {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.card-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 12px;
+  background: #f8f8f8;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
+}
+
+.form-card {
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background: #f8f8f8;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.input,
+.select {
+  border: 1px solid #dbe2ea;
+  border-radius: 5px;
+  background: #fff;
+  padding: 9px 11px;
+  font-size: 1rem;
+  font-family: Nunito, sans-serif;
+  box-sizing: border-box;
+}
+
+.primary-btn {
+  background: #2a7cd9;
+  color: white;
+  border: none;
+  border-radius: 15px;
+  padding: 10px 24px;
+  font-size: 1rem;
+  font-weight: 550;
+  font-family: Nunito, sans-serif;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.primary-btn:hover {
+  background: #2264d4;
+}
+
+.secondary-btn {
+  background: #d9d9d9;
+  color: #333;
+  border: none;
+  border-radius: 15px;
+  padding: 10px 24px;
+  font-size: 1rem;
+  font-weight: 500;
+  font-family: Nunito, sans-serif;
+  cursor: pointer;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
+  transition: background 0.2s;
+}
+
+.secondary-btn:hover {
+  background: #c4c4c4;
+}
+
+.edit-btn,
+.delete-btn {
+  border-radius: 15px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-family: Nunito, sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0px 4px 13px 0px rgba(0, 0, 0, 0.25);
+  transition: background 0.2s;
+}
+
+.edit-btn {
+  background: #2a7cd9;
+  color: white;
+}
+
+.edit-btn:hover {
+  background: #2264d4;
+}
+
+.delete-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.delete-btn:hover {
+  background: #dc2626;
+}
+
+@media (max-width: 820px) {
+  .form-grid,
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
 }
 </style>

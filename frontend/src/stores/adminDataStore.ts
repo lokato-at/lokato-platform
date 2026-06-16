@@ -282,6 +282,30 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       } finally {
         this.loading = false;
       }
+
     },
+
+    async uploadChildPhoto(id: number, file: File): Promise<string | null> {
+      try {
+        const formData = new FormData()
+        formData.append('photo', file)
+
+        const res = await api.post(`/admin/children/${id}/photo`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 60000,
+        })
+        const { photo_url } = res.data as { photo_url: string }
+
+        const child = this.children.find((c) => c.id === id)
+        if (child) child.photo_url = photo_url
+
+        return photo_url
+      } catch (err) {
+        this.setError('Fehler beim Hochladen des Fotos', err)
+        return null
+      }
+    },
+
+
   },
 });

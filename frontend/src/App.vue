@@ -6,7 +6,7 @@
 
     <picture v-if="!isTabletRoute">
       <source media="(max-width: 700px)" srcset="./views/images/hort_pregarten_mobile.webp" />
-      <img src="./views/images/hort_pregarten.svg" alt="Hort Pregarten" class="header-image" />
+      <img src="./views/images/hort_pregarten.png" alt="Hort Pregarten" class="header-image" />
     </picture>
 
     <nav v-if="!isTabletRoute" class="nav">

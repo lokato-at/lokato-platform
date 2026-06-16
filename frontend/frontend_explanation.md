@@ -48,6 +48,10 @@ Struktur & Routen:
 *   /admin/devices → DevicesAdminView
     
 *   /admin/movements → MovementAdminView
+
+Tablet Route
+
+*  #/tablet/roomId → TabletView 
     
 
 Eigenschaften:

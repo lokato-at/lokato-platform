@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\SseStreamController;
 use App\Http\Controllers\Api\DiagnosticsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\Admin\ChildPhotoController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -40,13 +41,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/summary', AdminSummaryController::class);
 
-        // /api/v1/admin/children
         Route::apiResource('children', ChildAdminController::class);
+        // NEU: Foto-Upload
+        Route::post('/children/{child}/photo', [ChildPhotoController::class, 'upload']);
 
-        // /api/v1/admin/rooms
         Route::apiResource('rooms', RoomAdminController::class);
-
-        // /api/v1/admin/devices
         Route::apiResource('devices', DeviceAdminController::class);
     });
 });

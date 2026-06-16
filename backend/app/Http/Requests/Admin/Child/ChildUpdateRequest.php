@@ -19,7 +19,7 @@ class ChildUpdateRequest extends FormRequest
 
         return [
             'name'        => ['sometimes', 'required', 'string', 'max:100'],
-            'photo_url'   => ['sometimes', 'nullable', 'url', 'max:255'],
+            'photo_url' => ['nullable', 'string', 'max:2048'],
             'tracker_uid' => [
                 'sometimes',
                 'required',

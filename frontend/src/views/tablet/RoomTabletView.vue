@@ -32,6 +32,18 @@ function childInitials(name?: string) {
   return name.trim().charAt(0).toUpperCase();
 }
 
+function statusBarUpdate(num: number) {
+  const statusBar = document.querySelector(".statusbar");
+  if (!statusBar) return;
+  const capacity = room.value?.capacity ?? 0;
+  const fill = statusBar.querySelector(".satusfill") as HTMLElement | null;
+  if (!fill) return;
+  const percentage = capacity > 0 ? Math.min((currentCount.value / capacity) * 100, 100) : 0;
+  fill.style.width = `${percentage}%`;
+  
+
+}
+
 async function loadRoom(nextRoomId: number | null) {
   if (!nextRoomId) {
     store.disconnectSSE();
@@ -59,18 +71,59 @@ onUnmounted(() => {
 
 <template>
   <section class="tablet">
+    <svg class="shape" xmlns="http://www.w3.org/2000/svg" width="733" height="751" viewBox="0 0 733 751"
+           fill="none">
+           <g filter="url(#filter0_d_54919_121)">
+               <path d="M528 0C566.66 6.4426e-08 598 31.3401 598 70V116.455C598 
+               132.471 610.984 145.455 627 145.455H659C697.66 145.455 729 176.795 729 
+               215.455V673C729 711.66 697.66 743 659 743H447.5C408.84 743 377.5 711.66 377.5 
+               673V444.448C377.5 405.788 346.16 374.448 307.5 374.448H74C35.3401 374.448 4 343.108 
+               4 304.448V70C4.00002 31.3401 35.3401 6.44261e-08 74 0H528Z" fill="#F5F5F5" />
+           </g>
+           <defs>
+               <filter id="filter0_d_54919_121" x="0" y="0" width="733" height="751" filterUnits="userSpaceOnUse"
+                   color-interpolation-filters="sRGB">
+                   <feFlood flood-opacity="0" result="BackgroundImageFix" />
+                   <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+                       result="hardAlpha" />
+                   <feOffset dy="4" />
+                   <feGaussianBlur stdDeviation="2" />
+                   <feComposite in2="hardAlpha" operator="out" />
+                   <feColorMatrix type="matrix"
+                       values="0 0 0 0 0.219608 0 0 0 0 0.25098 0 0 0 0 0.788235 0 0 0 0.5 0" />
+                   <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_54919_121" />
+                   <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_54919_121" result="shape" />
+               </filter>
+           </defs>
+       </svg>
     <header class="tablet-header">
-      <div>
+      <div class="room-info">
         <h2 class="room-title">{{ room?.name ?? "Room" }}</h2>
         <p class="meta">Aktuelle Belegung</p>
       </div>
+      <button class="search"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 33 33" fill="none">
+                <path d="M29.7417 32.25L18.4542 20.9625C17.5583 21.6792 16.5281 22.2465 15.3635 
+  22.6646C14.199 23.0826 12.9597 23.2917 11.6458 23.2917C8.39097 23.2917 5.63658 22.1641 3.38267 
+  19.909C1.12875 17.6539 0.00119539 14.8995 9.47972e-07 11.6458C-0.0011935 8.39217 1.12636 5.63778 
+  3.38267 3.38267C5.63897 1.12756 8.39336 0 11.6458 0C14.8983 0 17.6533 1.12756 19.9108 3.38267C22.1683 
+  5.63778 23.2953 8.39217 23.2917 11.6458C23.2917 12.9597 23.0826 14.199 22.6646 15.3635C22.2465 16.5281 21.6792 
+  17.5583 20.9625 18.4542L32.25 29.7417L29.7417 32.25ZM11.6458 19.7083C13.8854 19.7083 15.7894 18.9248 17.3577 17.3577C18.926 
+  15.7906 19.7095 13.8866 19.7083 11.6458C19.7071 9.40506 18.9236 7.50171 17.3577 5.93579C15.7918 4.36988 13.8878 3.58572 11.6458 
+  3.58333C9.40386 3.58094 7.50051 4.3651 5.93579 5.93579C4.37107 7.50649 3.58692 9.40983 3.58333 11.6458C3.57975 13.8818 4.3639 15.7858 
+  5.93579 17.3577C7.50768 18.9296 9.41103 19.7131 11.6458 19.7083Z" fill="#3840C9" fill-opacity="0.8" />
+            </svg></button>
       <div class="status">
+        <div class="statusbar">
+          <div class="satusfill"> {{ statusBarUpdate(currentCount) }}</div>
+        </div>
         <span class="count">{{ currentCount }}</span>
         <span class="capacity">/ {{ capacityLabel }}</span>
         <span class="connection" :class="{ online: store.sseConnected }">
           {{ connectionLabel }}
         </span>
+        
       </div>
+         
     </header>
 
     <p v-if="!roomId" class="error">Ungueltige Raum-ID.</p>
@@ -78,6 +131,7 @@ onUnmounted(() => {
     <p v-else-if="store.error" class="error">{{ store.error }}</p>
 
     <section v-else class="content">
+      <div class="content-back">
       <p v-if="!children.length" class="empty">Keine Kinder im Raum.</p>
 
       <ul v-else class="child-grid">
@@ -92,6 +146,7 @@ onUnmounted(() => {
           <span class="name">{{ child.name }}</span>
         </li>
       </ul>
+      </div>
     </section>
   </section>
 </template>
@@ -102,21 +157,47 @@ onUnmounted(() => {
   gap: 24px;
   padding: 24px 32px 40px;
   min-height: 100vh;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #B4D2E8 0%, #D2B6E3 100%);
   color: #0f172a;
 }
 
 .tablet-header {
-  display: flex;
+  /* display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 24px;
-  text-align: left;
+  text-align: center; */
+}
+
+.shape {
+  position: absolute;
+            top: 30px;
+           
+            width: 496px;
+            height: 508px;
+            fill: #F5F5F5;
+            filter: drop-shadow(0 4px 4px rgba(56, 64, 201, 0.50));
+}
+
+.room-info {
+            position: absolute;
+            width: 315px;
+            height: 315px;
+            aspect-ratio: 1/1;
+            left: 120px;
+            top: 175px;
+            border-radius: 100px;
+            background: #4EB0F1;
+            box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset, 7px 8px 9.4px 0 rgba(56, 64, 201, 0.40);
 }
 
 .room-title {
+  position: relative;
+  top: 80px;
+  text-align: center;
   font-size: 2.5rem;
   margin: 0 0 4px;
+  color: #ffffff;
 }
 
 .meta {
@@ -130,6 +211,29 @@ onUnmounted(() => {
   justify-items: end;
   gap: 6px;
   text-align: right;
+  
+}
+
+.statusbar {
+  position: absolute;
+            left: 75px;
+            top: 60px;
+            width: 314px;
+            height: 55px;
+            border-radius: 36px;
+            background: #FFFEFE;
+            box-shadow: 5px 4px 4px 0 rgba(56, 64, 201, 0.50), 0 4px 4px 0 rgba(56, 64, 201, 0.25) inset;
+}
+
+.satusfill {
+  height: 46px;
+  width: null;
+  left:13px;
+  
+  border-radius: 36px;
+  background: linear-gradient(90deg, rgba(216, 72, 47, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #F3EE4C;
+  background-blend-mode: hard-light, normal;
+  box-shadow: 0 4px 4px 0 rgba(216, 72, 47, 0.30);
 }
 
 .count {
@@ -139,8 +243,12 @@ onUnmounted(() => {
 }
 
 .capacity {
+  position: relative;
+  top: -6px;
   font-size: 1.2rem;
   color: #64748b;
+          
+           
 }
 
 .connection {
@@ -159,19 +267,58 @@ onUnmounted(() => {
 .content {
   display: grid;
   gap: 16px;
+  position: absolute;
+            top: 90px;
+  right: 15px;
+  
+  
+
+}
+
+.content-back {
+  position: relative;
+            
+  width: 380px;
+height: 430px;
+border-radius: 20px;
+background: #ECECEC;
+box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset;
+
+}
+
+.search {
+  position: absolute;
+            top: 42px;
+            left: 455px;
+            width: 70px;
+            height: 70px;
+            border-radius: 24px;
+            border: none;
+            background: #F5F5F5;
+            box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset, 3px 4px 4px 0 rgba(56, 64, 201, 0.50);
 }
 
 .child-grid {
-  list-style: none;
+  /*list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 16px;*/
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  position: absolute;
+            top: 60px;
+            left: 811px;
+            width: 425px;
+            height: 605px;
+            border-radius: 26px;
+            background: #ECECEC;
+            box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset;
 }
 
 .child-card {
-  display: grid;
+  /* display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
@@ -179,7 +326,23 @@ onUnmounted(() => {
   border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
-  font-size: 1.1rem;
+  font-size: 1.1rem; */
+  display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+  position: relative;
+            top: 24px;
+            left: 26px;
+            width: 150px;
+            height: 195px;
+            border-radius: 20px;
+            border-top: 1px solid #E62200;
+            border-right: 2px solid #E62200;
+            border-bottom: 8px solid #E62200;
+            border-left: 2px solid #E62200;
+            background: #FAAE20;
 }
 
 .avatar {

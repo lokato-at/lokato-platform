@@ -1,15 +1,15 @@
 <template>
   <div id="app">
-    <header v-if="!isTabletRoute" class="header">
+    <header v-if="!isTabletRoute && !isTVRoute && !isAllRoomsView" class="header">
       <h1>Lokato</h1>
     </header>
 
-    <picture v-if="!isTabletRoute">
+    <picture v-if="!isTabletRoute && !isTVRoute && !isAllRoomsView">
       <source media="(max-width: 700px)" srcset="./views/images/hort_pregarten_mobile.webp" />
       <img src="./views/images/hort_pregarten.svg" alt="Hort Pregarten" class="header-image" />
     </picture>
 
-    <nav v-if="!isTabletRoute" class="nav">
+    <nav v-if="!isTabletRoute && !isTVRoute && !isAllRoomsView" class="nav">
       <router-link
         to="/dashboard"
         class="nav-item"
@@ -38,6 +38,8 @@ import { useRoute } from "vue-router";
 
 const route = useRoute();
 const isTabletRoute = computed(() => route.path.startsWith("/tablet"));
+const isTVRoute = computed(() => route.path.startsWith("/tv"));
+const isAllRoomsView = computed(() => route.path.startsWith("/rooms"));
 </script>
 
 <style scoped>

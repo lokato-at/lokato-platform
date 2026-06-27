@@ -1,10 +1,15 @@
 import type { AxiosError, AxiosRequestConfig } from "axios";
 import { defineStore } from "pinia";
 import api from "../api/axios";
+import { buildApiUrl } from "@/utils/api";
 
 const ADMIN_REQUEST_TIMEOUT_MS = 30000;
 const ADMIN_TIMEOUT_RETRY_ATTEMPTS = 2;
 const ADMIN_TIMEOUT_RETRY_DELAY_MS = 1500;
+// Mindestabstand zwischen zwei silent-Refreshes — sonst löst jeder einzelne
+// Scan-Event eine volle Liste-Reload aus, was bei vielen Scans hintereinander
+// die DB unnötig hämmert.
+const ADMIN_SSE_REFRESH_THROTTLE_MS = 1000;
 
 export interface AdminRoom {
   id: number;
@@ -61,6 +66,15 @@ export const useAdminDataStore = defineStore("adminDataStore", {
 
     loading: false,
     error: null as string | null,
+
+    // SSE-Anbindung für Admin-Views: Wenn auf Dashboard/Tablet woanders
+    // is_active toggled wird oder ein Scan ein Kind aktiviert, sollen die
+    // Admin-Listen sich ohne F5 aktualisieren.
+    sse: null as EventSource | null,
+    sseConnected: false,
+    sseLastEventId: null as string | null,
+    sseLastChildRefreshAt: 0,
+    sseLastRoomRefreshAt: 0,
   }),
 
   actions: {
@@ -282,6 +296,55 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       } finally {
         this.loading = false;
       }
+    },
+
+    // ----- SSE-Sync für Admin-Views -----
+
+    connectSSE() {
+      if (this.sse) return;
+
+      const params = new URLSearchParams();
+      if (this.sseLastEventId) params.set("last_event_id", this.sseLastEventId);
+      const qs = params.toString();
+      this.sse = new EventSource(buildApiUrl(qs ? `/stream?${qs}` : "/stream"));
+
+      this.sse.onopen = () => {
+        this.sseConnected = true;
+      };
+
+      // child.moved kann is_active von false→true wechseln (erster Scan).
+      // Wir refreshen die Children-Liste mit Throttle gegen Scan-Bursts.
+      this.sse.addEventListener("child.moved", (e: MessageEvent) => {
+        this.sseLastEventId = e.lastEventId || this.sseLastEventId;
+        const now = Date.now();
+        if (now - this.sseLastChildRefreshAt < ADMIN_SSE_REFRESH_THROTTLE_MS) return;
+        this.sseLastChildRefreshAt = now;
+        void this.loadChildren();
+      });
+
+      // room.status.updated bringt is_active, name, capacity, ... direkt mit.
+      this.sse.addEventListener("room.status.updated", (e: MessageEvent) => {
+        this.sseLastEventId = e.lastEventId || this.sseLastEventId;
+        const now = Date.now();
+        if (now - this.sseLastRoomRefreshAt < ADMIN_SSE_REFRESH_THROTTLE_MS) return;
+        this.sseLastRoomRefreshAt = now;
+        void this.loadRooms();
+      });
+
+      this.sse.addEventListener("stream.draining", () => {
+        this.disconnectSSE();
+        this.connectSSE();
+      });
+
+      this.sse.onerror = () => {
+        this.sseConnected = false;
+      };
+    },
+
+    disconnectSSE() {
+      if (this.sse) this.sse.close();
+      this.sse = null;
+      this.sseConnected = false;
     },
   },
 });

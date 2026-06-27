@@ -103,6 +103,17 @@ export const useRoomTabletStore = defineStore("roomTabletStore", {
         console.warn("[RoomTabletStore] Room alert", payload);
       });
 
+      this.sse.addEventListener("room.status.updated", (e: MessageEvent) => {
+        this.lastEventId = e.lastEventId || this.lastEventId;
+        const payload = parseJsonSafely<Room>(e.data);
+        if (payload && payload.id === this.roomId) {
+          this.snapshot = {
+            ...this.snapshot,
+            room: { ...this.snapshot.room, ...payload },
+          };
+        }
+      });
+
       this.sse.addEventListener("stream.draining", () => {
         console.info("[RoomTabletStore] Server requested stream rotation");
         this.disconnectSSE();

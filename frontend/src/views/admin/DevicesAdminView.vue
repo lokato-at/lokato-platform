@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 import type { AdminDevice, AdminRoom } from "@/stores/adminDataStore";
 
@@ -140,6 +140,11 @@ async function remove(device: AdminDevice) {
 
 onMounted(async () => {
   await Promise.all([store.loadDevices(), store.loadRooms()]);
+  store.connectSSE();
+});
+
+onUnmounted(() => {
+  store.disconnectSSE();
 });
 </script>
 

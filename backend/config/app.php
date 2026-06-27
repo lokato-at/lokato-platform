@@ -122,6 +122,10 @@ return [
 
     'sse_max_connection_seconds' => (int) env('SSE_MAX_CONNECTION_SECONDS', 60),
 
+    'diagnostics_enabled' => filter_var(env('DIAGNOSTICS_ENABLED', true), FILTER_VALIDATE_BOOL),
+
+    'scan_rate_limit' => (int) env('SCAN_RATE_LIMIT_PER_MINUTE', 120),
+
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),

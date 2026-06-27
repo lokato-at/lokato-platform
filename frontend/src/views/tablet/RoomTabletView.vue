@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRoomTabletStore } from "@/stores/roomTabletStore";
+import { useBranding } from "@/composables/useBranding";
 
 const store = useRoomTabletStore();
 const route = useRoute();
+const { config: branding } = useBranding();
 
 const roomId = computed(() => {
   const param = Array.isArray(route.params.roomId)
@@ -19,7 +21,7 @@ const children = computed(() => store.snapshot.children ?? []);
 const currentCount = computed(() => store.snapshot.current_count ?? children.value.length);
 
 const connectionLabel = computed(() =>
-  store.sseConnected ? "Live verbunden" : "Live Verbindung...",
+  store.sseConnected ? "Live" : "verbindet...",
 );
 
 const capacityLabel = computed(() => {
@@ -42,19 +44,120 @@ async function loadRoom(nextRoomId: number | null) {
   store.connectSSE(nextRoomId);
 }
 
+// ---------------------------------------------------------------------------
+// Animation auf neue Ankunft
+// ---------------------------------------------------------------------------
+// Strategie: Wir vergleichen die Kinder-IDs vor und nach jedem Update.
+// Neue ID dazugekommen → ein Kind wurde gerade gescannt → Animation.
+// Cooldown verhindert, dass bei mehreren gleichzeitigen Scans
+// (kommt vor, wenn mehrere Kinder hintereinander durch die Tür gehen)
+// die Animation mehrfach durchstartet.
+
+const knownChildIds = ref<Set<number>>(new Set());
+const isFirstSnapshot = ref(true);
+const currentAnimation = ref<string | null>(null);
+const lastTriggerAt = ref(0);
+const soundUnlocked = ref(false);
+
+// Browser-Autoplay-Policy: Video mit Ton darf erst nach erster User-Geste
+// abgespielt werden. Wir hören EINMAL auf den ersten Klick/Touch im
+// Tablet-View — danach sind alle weiteren Videos mit Ton möglich.
+function unlockSound() {
+  soundUnlocked.value = true;
+}
+
 onMounted(() => {
+  window.addEventListener("click", unlockSound, { once: true });
+  window.addEventListener("touchstart", unlockSound, { once: true, passive: true });
   void loadRoom(roomId.value);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("click", unlockSound);
+  window.removeEventListener("touchstart", unlockSound);
+  store.disconnectSSE();
 });
 
 watch(roomId, (next, prev) => {
   if (next === prev) return;
   store.disconnectSSE();
+  // Bei Raumwechsel: alles zurücksetzen, sonst werden bestehende Kinder
+  // im neuen Raum fälschlich als "Ankunft" gewertet.
+  knownChildIds.value = new Set();
+  isFirstSnapshot.value = true;
+  currentAnimation.value = null;
   void loadRoom(next);
 });
 
-onUnmounted(() => {
-  store.disconnectSSE();
-});
+// Hauptdetektor: ID-Diff über die children-Liste.
+watch(
+  () => children.value.map((c) => c.id),
+  (nextIds) => {
+    const nextSet = new Set(nextIds);
+
+    if (isFirstSnapshot.value) {
+      // Erstes Update nach Mount / Raumwechsel: nur Baseline setzen, KEIN Trigger.
+      knownChildIds.value = nextSet;
+      isFirstSnapshot.value = false;
+      return;
+    }
+
+    const arrivals = nextIds.filter((id) => !knownChildIds.value.has(id));
+    knownChildIds.value = nextSet;
+
+    if (arrivals.length > 0) {
+      tryTriggerAnimation();
+    }
+  },
+);
+
+function tryTriggerAnimation() {
+  // Inaktive Räume zeigen das "Raum geschlossen"-Banner — eine Welcome-
+  // Animation wäre da widersprüchlich. Theoretisch sollte ein Scan in einen
+  // inaktiven Raum nicht passieren (Raum gibt's, Device ist drin), aber wenn
+  // doch: kein Trigger.
+  if (room.value?.is_active === false) return;
+
+  const files = branding.value.animations.files;
+  if (files.length === 0) return;
+  if (currentAnimation.value) return; // läuft schon → ignorieren
+
+  const cooldownMs = (branding.value.animations.cooldownSeconds || 10) * 1000;
+  if (Date.now() - lastTriggerAt.value < cooldownMs) return;
+
+  const pick = files[Math.floor(Math.random() * files.length)];
+  currentAnimation.value = pick;
+  lastTriggerAt.value = Date.now();
+}
+
+// Wenn der Raum mitten in einer laufenden Animation deaktiviert wird:
+// Animation sofort abbrechen, sonst spielt sie über dem "geschlossen"-Banner.
+watch(
+  () => room.value?.is_active,
+  (isActive) => {
+    if (isActive === false && currentAnimation.value) {
+      currentAnimation.value = null;
+    }
+  },
+);
+
+const videoSrc = computed(() =>
+  currentAnimation.value
+    ? `/branding/animations/${encodeURIComponent(currentAnimation.value)}`
+    : "",
+);
+
+const videoMuted = computed(
+  () => !branding.value.animations.playWithSound || !soundUnlocked.value,
+);
+
+function onVideoEnded() {
+  currentAnimation.value = null;
+}
+
+function dismissAnimation() {
+  currentAnimation.value = null;
+}
 </script>
 
 <template>
@@ -77,6 +180,11 @@ onUnmounted(() => {
     <p v-else-if="store.loading" class="info">Lade Raumdaten...</p>
     <p v-else-if="store.error" class="error">{{ store.error }}</p>
 
+    <div v-else-if="room?.is_active === false" class="room-closed">
+      <p class="room-closed-title">Raum derzeit geschlossen</p>
+      <p class="room-closed-sub">Der Raum „{{ room?.name }}" ist aktuell nicht aktiv.</p>
+    </div>
+
     <section v-else class="content">
       <p v-if="!children.length" class="empty">Keine Kinder im Raum.</p>
 
@@ -93,6 +201,29 @@ onUnmounted(() => {
         </li>
       </ul>
     </section>
+
+    <!-- Begrüßungs-Animation für neu eintreffende Kinder -->
+    <div
+      v-if="currentAnimation"
+      class="animation-overlay"
+      @click="dismissAnimation"
+    >
+      <video
+        :key="currentAnimation"
+        :src="videoSrc"
+        :muted="videoMuted"
+        autoplay
+        playsinline
+        class="animation-video"
+        @ended="onVideoEnded"
+      />
+      <p
+        v-if="!soundUnlocked && branding.animations.playWithSound"
+        class="sound-hint"
+      >
+        Tippen für Ton
+      </p>
+    </div>
   </section>
 </template>
 
@@ -218,6 +349,69 @@ onUnmounted(() => {
   color: #475569;
 }
 
+.room-closed {
+  display: grid;
+  gap: 12px;
+  padding: 48px 24px;
+  border-radius: 20px;
+  background: #fef3c7;
+  color: #78350f;
+  text-align: center;
+  border: 2px dashed #d97706;
+}
+
+.room-closed-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.room-closed-sub {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #92400e;
+}
+
+/* ----- Animation-Overlay ----- */
+.animation-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  cursor: pointer;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animation-video {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 20px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  background: black;
+}
+
+.sound-hint {
+  position: absolute;
+  bottom: 32px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  padding: 10px 22px;
+  border-radius: 999px;
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  pointer-events: none;
+  letter-spacing: 0.2px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @media (max-width: 900px) {
   .tablet {
     padding: 20px;
@@ -235,4 +429,3 @@ onUnmounted(() => {
   }
 }
 </style>
-

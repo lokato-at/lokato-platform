@@ -1,0 +1,135 @@
+# Production — Raspberry Pi Setup
+
+Pi nativ (kein Docker). `start-prod-raspi.sh` ist idempotent und macht das komplette Setup.
+
+---
+
+## Voraussetzungen
+
+- Raspberry Pi 4 mit Pi OS 64-bit (Bookworm empfohlen — PHP 8.2 als Default)
+- Internet für `apt install`
+- Standard-User mit `sudo`-Rechten
+
+## Setup-Lauf
+
+```bash
+# Repo aufs Pi klonen
+git clone https://github.com/lokato-at/lokato-platform.git /home/pi/lokato-platform
+cd /home/pi/lokato-platform
+
+# Konfiguration anpassen (Default-Pi-IP 192.168.1.100)
+export PI_IP=192.168.1.100
+export PI_GATEWAY=192.168.1.1
+export DB_PASSWORD="ein-starkes-passwort"
+
+# Optional: Mail-Alarmierung bei Audit-Anomalien
+export ALERT_EMAIL="dein.name@example.com"
+
+chmod +x start-prod-raspi.sh stop-prod-raspi.sh
+./start-prod-raspi.sh
+```
+
+Das Skript ist idempotent — mehrfache Läufe sind sicher.
+
+## Was das Skript macht (in dieser Reihenfolge)
+
+1. `apt install` — nginx, php-fpm, default-mysql-server (MariaDB), mosquitto, nodejs, composer, rsync
+2. **Statische IP** — Auto-Detect zwischen NetworkManager (nmcli) und dhcpcd
+3. **MariaDB** — User + Datenbank + Schema-Import aus `docker/sql/init/01_schema.sql`
+4. **Mosquitto** — Config aus `docker/mosquitto/config/` nach `/etc/mosquitto/conf.d/lokato.conf`
+5. **nginx** — vhost aus `docker/nginx/prod.conf` nach `/etc/nginx/sites-available/lokato`, Default-Site disabled
+6. **php-fpm** — Pool aus `docker/php-fpm/lokato-pool.conf` nach `/etc/php/X.Y/fpm/pool.d/`, Default-www-Pool nach `.disabled` verschoben
+7. **systemd-Unit** für `lokato-mqtt` aus `docker/systemd/lokato-mqtt.service`
+8. **Backend deployen** nach `/var/www/lokato/backend/` via rsync, dann `composer install --no-dev`, `key:generate`, `migrate --force`, `config:cache`, `route:cache`, `view:cache`
+9. **Frontend bauen** (`npm ci && npm run build`), dist nach `/var/www/lokato/frontend/dist/`
+10. **Tools deployen** (`tools/log_audit/` nach `/var/www/lokato/tools/`)
+11. **Cron-Jobs** für `www-data` (Laravel-Scheduler + Log-Audit, siehe `CRON.md`)
+12. **Reload + Restart** aller Services
+
+Am Ende: Summary-Box mit echter Pi-IP und Bookmark-URLs.
+
+## Smoketest nach Setup
+
+```bash
+# Alle Services aktiv?
+systemctl status nginx php8.2-fpm mariadb mosquitto lokato-mqtt --no-pager
+
+# API-Health
+curl http://localhost/api/health
+
+# Subscriber lebt?
+journalctl -u lokato-mqtt --since "1 min ago" | grep "Subscribed"
+```
+
+Erwartete Ausgaben:
+- alle 5 Services **active (running)**
+- `/api/health` → `{"status":"ok",...}`
+- `journalctl` → mind. `Subscribed. Waiting for messages on topic: /api/v1/scan`
+
+## Pi-Befehls-Cheat-Sheet
+
+| Was | Befehl |
+|---|---|
+| Setup ausführen | `./start-prod-raspi.sh` |
+| MQTT stoppen | `./stop-prod-raspi.sh` |
+| Alles stoppen | `./stop-prod-raspi.sh --full` |
+| Service-Status (alle) | `systemctl status nginx php8.2-fpm mariadb mosquitto lokato-mqtt` |
+| Live-Log MQTT | `journalctl -u lokato-mqtt -f` |
+| Aktuelle Pi-IP | `hostname -I` |
+| Laravel-Logs live | `sudo tail -f /var/www/lokato/backend/storage/logs/{scan,sse,laravel,cron}.log` |
+| Manueller Daily-Reset | `sudo -u www-data php /var/www/lokato/backend/artisan children:daily-active-reset` |
+| Log-Audit jetzt | `cd /var/www/lokato && python3 tools/log_audit/log_audit.py check --period daily --config tools/log_audit/config.json` |
+| Backend-`.env` | `sudo nano /var/www/lokato/backend/.env` |
+| Backend re-deployen | `./start-prod-raspi.sh` (idempotent) |
+
+## Test-Scan auf dem Pi
+
+```bash
+mosquitto_pub -h localhost -t "/api/v1/scan" \
+  -m '{"device_key":"RaspberryChild02","tracker_uid":"0x80691500004023FDD55DFC23","event_time":"2026-06-15T10:00:00+02:00"}'
+```
+
+→ `journalctl -u lokato-mqtt -f` zeigt `mqtt_message_processed`, Tablets/Dashboard updaten binnen 500 ms.
+
+## Tablet-Bookmarks
+
+| Gerät | URL |
+|---|---|
+| Admin/Dashboard | `http://192.168.1.100/#/dashboard` |
+| Tablet Raum 1 | `http://192.168.1.100/#/tablet/1` oder `?id=1` |
+| Tablet Raum 2 | `http://192.168.1.100/#/tablet/2` |
+| Tablet Raum 3 | `http://192.168.1.100/#/tablet/3` |
+
+(IP entsprechend ersetzen.)
+
+## Pi-IP wechseln
+
+Same-Origin-Routing → IP ist **nicht** im JS-Bundle. Kein Rebuild nötig:
+
+```bash
+# NetworkManager
+sudo nmcli con mod "Wired connection 1" \
+  ipv4.addresses 192.168.1.99/24 \
+  ipv4.method manual
+sudo nmcli con up "Wired connection 1"
+
+# ODER dhcpcd
+sudo nano /etc/dhcpcd.conf   # ip_address-Zeile anpassen
+sudo systemctl restart dhcpcd
+```
+
+Danach Tablet-Bookmarks auf neue IP umstellen. Fertig.
+
+## Production-Test-Checkliste vor Hort-Einsatz
+
+- [ ] `systemctl status` zeigt alle 5 Dienste active
+- [ ] `/api/health` + `/api/readiness` antworten 200
+- [ ] Test-Scan löst `MovementLog`-Eintrag aus
+- [ ] Tablet im Hort-WLAN erreicht `http://<pi-ip>/#/tablet/1`
+- [ ] Dashboard auf Admin-Gerät zeigt alle Räume
+- [ ] `daily_reset_finished` taucht in `cron.log` täglich auf
+- [ ] `log_audit.py check --period daily` → Exit 0
+- [ ] Reboot-Test: alle Dienste kommen automatisch hoch
+- [ ] DB-Backup-Strategie geklärt
+- [ ] Hort-Personal kennt die Tablet-Bookmarks
+- [ ] hinterlegte Kinder mit Hort-Liste abgeglichen

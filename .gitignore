@@ -125,8 +125,21 @@ backend/storage/*.key
 backend/storage/logs/*
 
 # AI / Tools
-backend/.cursor/
-backend/.junie/
+**/.claude/
+**/.cursor/
+**/.junie/
+
+# Branding — pro Einrichtung individuell, NICHT einchecken.
+# Nur die *.example und die Ordnerstruktur (README + .gitkeep) gehören ins Repo.
+frontend/public/branding/config.json
+frontend/public/branding/facility-logo.*
+frontend/public/branding/facility-banner.*
+frontend/public/branding/dashboard/*
+!frontend/public/branding/dashboard/.gitkeep
+frontend/public/branding/children/*
+!frontend/public/branding/children/.gitkeep
+frontend/public/branding/animations/*
+!frontend/public/branding/animations/.gitkeep
 
 # Public Symlink / Hot Reload
 backend/public/storage

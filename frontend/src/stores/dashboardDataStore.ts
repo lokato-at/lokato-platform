@@ -140,6 +140,12 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
                 console.warn("[Dashboard ALERT]", payload);
             });
 
+            this.sse.addEventListener("room.status.updated", (e: MessageEvent) => {
+                this.lastEventId = e.lastEventId || this.lastEventId;
+                const payload = parseJsonSafely<Room>(e.data);
+                if (payload) this.handleRoomStatusUpdate(payload);
+            });
+
             this.sse.addEventListener("stream.draining", () => {
                 console.info("[DashboardStore] Server requested stream rotation");
                 this.disconnectSSE();
@@ -168,6 +174,32 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
 
             this.latestMovements.unshift(movement);
             if (this.latestMovements.length > 5) this.latestMovements.length = 5;
+        },
+
+        handleRoomStatusUpdate(payload: Room) {
+            if (!this.rooms) {
+                this.rooms = [payload];
+                return;
+            }
+            const idx = this.rooms.findIndex((r) => r.id === payload.id);
+            if (idx >= 0) {
+                // Merge — behält children/current_count aus occupancy-Updates
+                this.rooms[idx] = { ...this.rooms[idx], ...payload };
+            } else {
+                this.rooms.push(payload);
+            }
+        },
+
+        async toggleRoomActive(roomId: number, isActive: boolean) {
+            this.error = null;
+            try {
+                await api.patch(`/admin/rooms/${roomId}`, { is_active: isActive });
+                // State-Update kommt per SSE (room.status.updated) zurück —
+                // wir setzen hier nichts optimistisch, damit es keine Drift gibt.
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : "Fehler beim Aktualisieren des Raums";
+                throw err;
+            }
         },
 
         handleOccupancyUpdate(payload: OccupancyUpdatePayload) {

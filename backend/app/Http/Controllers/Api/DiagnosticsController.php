@@ -12,9 +12,16 @@ class DiagnosticsController extends Controller
 {
     public function health(): JsonResponse
     {
+        // LARAVEL_START is defined by public/index.php at request start. When
+        // the app is bootstrapped from a different entry (CLI tests, queue
+        // workers), the constant is undefined — fall back to 0 uptime.
+        $uptime = defined('LARAVEL_START')
+            ? (int) (microtime(true) - LARAVEL_START)
+            : 0;
+
         return response()->json([
             'status' => 'ok',
-            'uptime_seconds' => (int) (microtime(true) - LARAVEL_START),
+            'uptime_seconds' => $uptime,
             'timezone' => config('app.timezone'),
             'now' => now()->toIso8601String(),
             'version' => config('app.version', 'unknown'),

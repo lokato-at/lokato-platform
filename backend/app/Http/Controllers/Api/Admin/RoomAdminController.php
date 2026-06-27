@@ -6,11 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Room\RoomStoreRequest;
 use App\Http\Requests\Admin\Room\RoomUpdateRequest;
 use App\Models\Room;
+use App\Support\SseChangeSignal;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 
 class RoomAdminController extends Controller
 {
+    public function __construct(
+        private readonly SseChangeSignal $sseChangeSignal,
+    ) {
+    }
+
     public function index(): JsonResponse
     {
         $rooms = Room::query()
@@ -43,6 +49,10 @@ class RoomAdminController extends Controller
         $room->fill($request->validated());
         $room->save();
 
+        // SSE-Bump damit Dashboard/Tablet das aktualisierte is_active / name /
+        // capacity sofort sehen, ohne auf die nächste Bewegung warten zu müssen.
+        $this->sseChangeSignal->bump();
+
         return response()->json($room);
     }
 
@@ -56,6 +66,8 @@ class RoomAdminController extends Controller
                 'error' => $e->getCode(),
             ], 409);
         }
+
+        $this->sseChangeSignal->bump();
 
         return response()->json([
             'message' => 'Room deleted',

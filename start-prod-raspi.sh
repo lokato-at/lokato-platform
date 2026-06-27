@@ -204,11 +204,12 @@ SQL
 # ----- 4) Mosquitto ----------------------------------------------------------
 configure_mosquitto() {
     info "Mosquitto konfigurieren..."
-    # Repo-Config nach /etc/mosquitto/conf.d/ uebernehmen, falls vorhanden.
-    if [[ -f "$DOCKER_DIR/mosquitto/config/mosquitto.conf" ]]; then
-        sudo install -m 644 \
-            "$DOCKER_DIR/mosquitto/config/mosquitto.conf" \
-            /etc/mosquitto/conf.d/lokato.conf
+    # Pi-specific config (apt paths, 0.0.0.0 listener). The plain mosquitto.conf
+    # next to it uses container paths (/mosquitto/...) which would crash mosquitto
+    # on a native Pi install.
+    local pi_conf="$DOCKER_DIR/mosquitto/config/mosquitto-pi.conf"
+    if [[ -f "$pi_conf" ]]; then
+        sudo install -m 644 "$pi_conf" /etc/mosquitto/conf.d/lokato.conf
         ok "Mosquitto-Config installiert."
     fi
     sudo systemctl enable --now mosquitto

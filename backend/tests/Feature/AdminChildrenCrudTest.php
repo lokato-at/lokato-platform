@@ -3,12 +3,26 @@
 namespace Tests\Feature;
 
 use App\Models\Child;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AdminChildrenCrudTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Admin endpoints are auth:sanctum-protected; authenticate as a fresh
+        // user for every test so the CRUD assertions can run.
+        Sanctum::actingAs(User::create([
+            'name' => 'Test Admin',
+            'email' => 'test-admin@lokato.test',
+            'password' => bcrypt('test-pass'),
+        ]));
+    }
 
     /** @test */
     public function test_admin_can_create_child()

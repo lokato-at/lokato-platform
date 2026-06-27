@@ -56,10 +56,15 @@ class SseStreamController extends Controller
         $clientId = (string) Str::uuid();
         $this->prepareStream();
         [$lastMovementId, $lastAlertId] = $this->resolveStreamCursor($request);
+        // Room-Status-Updates (is_active, name, capacity, ...) werden über
+        // updated_at gepollt. Baseline = aktueller Max-Wert, damit beim
+        // Connect nicht alle Räume "als geändert" gepusht werden.
+        $lastRoomChangeAt = (string) (Room::query()->max('updated_at') ?? '1970-01-01 00:00:00');
         $startedAt = microtime(true);
         $maxDurationSeconds = (int) config('app.sse_max_connection_seconds', 60);
         $lastHeartbeatAt = microtime(true);
         $lastChangeSeen = $this->sseChangeSignal->lastChangeAt();
+        $lastChildrenChangeSeen = $this->sseChangeSignal->lastChildrenChangeAt();
         $scope = $scopedRoomId === null ? 'dashboard' : "room:{$scopedRoomId}";
 
         Log::channel('sse')->info('SSE client connected', [
@@ -108,11 +113,22 @@ class SseStreamController extends Controller
                 $forceInitialPoll = false;
                 $lastChangeSeen = max($lastChangeSeen, $currentChange);
 
-                [$lastMovementId, $lastAlertId] = $this->pollIteration(
+                [$lastMovementId, $lastAlertId, $lastRoomChangeAt] = $this->pollIteration(
                     $scopedRoomId,
                     $lastMovementId,
                     $lastAlertId,
+                    $lastRoomChangeAt,
                 );
+
+                // Children-Aenderungen (is_active toggle via Admin etc.) bringen
+                // keine MovementLog-Eintraege mit sich — daher wuerde pollIteration
+                // sie nicht sehen. Wir refreshen die Occupancy-Snapshots aller
+                // betroffenen Raeume separat, wenn das Children-Signal sich erhoeht hat.
+                $currentChildrenChange = $this->sseChangeSignal->lastChildrenChangeAt();
+                if ($currentChildrenChange > $lastChildrenChangeSeen) {
+                    $lastChildrenChangeSeen = $currentChildrenChange;
+                    $this->emitFullRoomOccupancyRefresh($scopedRoomId, $lastMovementId, $lastAlertId);
+                }
             }
 
             $now = microtime(true);
@@ -143,14 +159,19 @@ class SseStreamController extends Controller
     }
 
     /**
-     * @return array{0:int, 1:int}  aktualisierte Cursor (lastMovementId, lastAlertId)
+     * @return array{0:int, 1:int, 2:string}  aktualisierte Cursor (lastMovementId, lastAlertId, lastRoomChangeAt)
      */
-    protected function pollIteration(?int $scopedRoomId, int $lastMovementId, int $lastAlertId): array
+    protected function pollIteration(?int $scopedRoomId, int $lastMovementId, int $lastAlertId, string $lastRoomChangeAt): array
     {
         $changedRoomIds = [];
 
         $movementQuery = MovementLog::query()
             ->select(['id', 'child_id', 'from_room_id', 'to_room_id', 'device_id', 'source', 'occurred_at'])
+            ->with([
+                'child:id,name',
+                'fromRoom:id,name',
+                'toRoom:id,name',
+            ])
             ->where('id', '>', $lastMovementId)
             ->orderBy('id')
             ->limit(100);
@@ -166,11 +187,26 @@ class SseStreamController extends Controller
 
         foreach ($movements as $movement) {
             $lastMovementId = $movement->id;
+            // Payload-Schema MUSS dem von /api/v1/movement-log entsprechen,
+            // sonst rendert die Dashboard-„Letzte Bewegungen"-Liste „? → ?"
+            // statt sprechender Raum-/Kind-Namen.
             $this->sendEvent('child.moved', [
                 'id' => $movement->id,
                 'child_id' => $movement->child_id,
+                'child' => $movement->child ? [
+                    'id' => $movement->child->id,
+                    'name' => $movement->child->name,
+                ] : null,
                 'from_room_id' => $movement->from_room_id,
+                'from_room' => $movement->fromRoom ? [
+                    'id' => $movement->fromRoom->id,
+                    'name' => $movement->fromRoom->name,
+                ] : null,
                 'to_room_id' => $movement->to_room_id,
+                'to_room' => $movement->toRoom ? [
+                    'id' => $movement->toRoom->id,
+                    'name' => $movement->toRoom->name,
+                ] : null,
                 'device_id' => $movement->device_id,
                 'source' => $movement->source,
                 'occurred_at' => $movement->occurred_at?->toIso8601String(),
@@ -236,7 +272,70 @@ class SseStreamController extends Controller
             ], $this->formatEventCursor($lastMovementId, $lastAlertId));
         }
 
-        return [$lastMovementId, $lastAlertId];
+        // Room-Metadata-Updates (is_active, name, capacity, tolerance, area).
+        // Wir emittieren room.status.updated, damit Dashboards/Tablets ihren
+        // Zustand ohne Page-Reload synchronisieren können.
+        $roomQuery = Room::query()
+            ->select(['id', 'name', 'area', 'capacity', 'tolerance', 'is_active', 'updated_at'])
+            ->where('updated_at', '>', $lastRoomChangeAt)
+            ->orderBy('updated_at')
+            ->limit(50);
+
+        if ($scopedRoomId !== null) {
+            $roomQuery->where('id', $scopedRoomId);
+        }
+
+        $changedRooms = $roomQuery->get();
+
+        foreach ($changedRooms as $room) {
+            if ($room->updated_at) {
+                $lastRoomChangeAt = $room->updated_at->toDateTimeString();
+            }
+
+            $this->sendEvent('room.status.updated', [
+                'id' => $room->id,
+                'name' => $room->name,
+                'area' => $room->area,
+                'capacity' => $room->capacity,
+                'tolerance' => $room->tolerance,
+                'is_active' => (bool) $room->is_active,
+            ], $this->formatEventCursor($lastMovementId, $lastAlertId));
+        }
+
+        return [$lastMovementId, $lastAlertId, $lastRoomChangeAt];
+    }
+
+    /**
+     * Bei Children-Aenderungen kennen wir den betroffenen Raum nicht direkt
+     * (ein Toggle aendert ja keine Location). Daher refreshen wir Occupancy
+     * fuer alle Raeume — bei einem Stream mit room-scope nur den einen Raum.
+     */
+    protected function emitFullRoomOccupancyRefresh(?int $scopedRoomId, int $lastMovementId, int $lastAlertId): void
+    {
+        $roomIds = $scopedRoomId !== null
+            ? [$scopedRoomId]
+            : Room::query()->pluck('id')->all();
+
+        if ($roomIds === []) return;
+
+        $rooms = Room::query()
+            ->select(['id', 'name'])
+            ->whereIn('id', $roomIds)
+            ->get()
+            ->keyBy('id');
+        $snapshots = $this->occupancySnapshotBuilder->forRoomIds($roomIds, true);
+
+        foreach ($snapshots as $roomId => $snapshot) {
+            $room = $rooms->get($roomId);
+            if (! $room) continue;
+
+            $this->sendEvent('room.occupancy.updated', [
+                'room_id' => $room->id,
+                'room_name' => $room->name,
+                'current_count' => $snapshot['current_count'],
+                'children' => $snapshot['children'] ?? [],
+            ], $this->formatEventCursor($lastMovementId, $lastAlertId));
+        }
     }
 
     protected function prepareStream(): void

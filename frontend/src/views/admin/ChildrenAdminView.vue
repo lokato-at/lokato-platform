@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 import type { AdminChild } from "@/stores/adminDataStore";
 
@@ -117,6 +117,11 @@ async function remove(child: AdminChild) {
 
 onMounted(() => {
   store.loadChildren();
+  store.connectSSE();
+});
+
+onUnmounted(() => {
+  store.disconnectSSE();
 });
 </script>
 

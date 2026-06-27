@@ -2,11 +2,45 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useDashboardDataStore } from '@/stores/dashboardDataStore'
 import type { Child, Movement, OccupancySnapshot, Room } from '@/stores/dashboardDataStore'
+import { useAuthStore } from '@/stores/authStore'
+import RoomCard from '@/components/RoomCard.vue'
+import ChildBadge from '@/components/ChildBadge.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const store = useDashboardDataStore()
+const auth = useAuthStore()
 const childSearch = ref('')
 const selectedRoomId = ref<number | null>(null)
 const checkoutInProgress = reactive(new Set<number>())
+const roomToggleInProgress = reactive(new Set<number>())
+
+type PendingAction =
+  | { type: 'checkout'; childId: number; childName: string; roomId: number }
+  | { type: 'toggleRoom'; roomId: number; roomName: string; targetActive: boolean }
+
+const pendingAction = ref<PendingAction | null>(null)
+const confirmBusy = ref(false)
+
+const confirmConfig = computed(() => {
+  const a = pendingAction.value
+  if (!a) return null
+  if (a.type === 'checkout') {
+    return {
+      title: 'Kind austragen?',
+      message: `"${a.childName}" wird aus dem Raum ausgetragen und deaktiviert. Diese Aktion lässt sich nur durch erneutes Einchecken rückgängig machen.`,
+      confirmLabel: 'Austragen',
+      variant: 'danger' as const,
+    }
+  }
+  return {
+    title: a.targetActive ? 'Raum aktivieren?' : 'Raum deaktivieren?',
+    message: a.targetActive
+      ? `"${a.roomName}" wird wieder als aktiver Raum geführt.`
+      : `"${a.roomName}" wird deaktiviert. Inaktive Räume erscheinen für nicht angemeldete Nutzer:innen nicht mehr im Dashboard.`,
+    confirmLabel: a.targetActive ? 'Aktivieren' : 'Deaktivieren',
+    variant: (a.targetActive ? 'default' : 'danger') as 'default' | 'danger',
+  }
+})
 
 const normalizedChildSearch = computed(() => childSearch.value.trim().toLowerCase())
 
@@ -30,7 +64,12 @@ interface RoomCard {
 }
 
 const roomCards = computed<RoomCard[]>(() => {
-  const rooms = (store.rooms ?? []).filter((room) => isEntityActive(room))
+  // Angemeldete Nutzer:innen sehen alle Räume (inkl. inaktive, um sie wieder
+  // aktivieren zu können). Nicht-angemeldete Tablet-/Eltern-Sicht sieht nur
+  // aktive Räume.
+  const rooms = (store.rooms ?? []).filter(
+    (room) => auth.isAuthenticated || isEntityActive(room),
+  )
   const roomQuery = ''
   const childQuery = normalizedChildSearch.value
 
@@ -51,7 +90,9 @@ const roomCards = computed<RoomCard[]>(() => {
         return name.includes(childQuery) || tracker.includes(childQuery)
       })
 
-      const occupancyCount = snapshot.current_count ?? visibleChildren.length
+      // Nur AKTIVE Kinder zählen als anwesend — Backend hält ChildLocation
+      // bei Checkout bewusst leer, aber zur Sicherheit filtern wir nochmal.
+      const occupancyCount = visibleChildren.length
       const capacity = room.capacity ?? 0
       const occupancyRatio = capacity > 0 ? Math.min((occupancyCount / capacity) * 100, 100) : 0
       const status: RoomCard['status'] = room.status?.over_capacity
@@ -78,7 +119,13 @@ const roomCards = computed<RoomCard[]>(() => {
       const matchesChild = !childQuery || card.visibleChildren.length > 0
       return matchesRoom && matchesChild
     })
-    .sort((a, b) => a.room.name.localeCompare(b.room.name, 'de'))
+    .sort((a, b) => {
+      // Aktive Räume zuerst, dann inaktive — innerhalb alphabetisch.
+      const aActive = isEntityActive(a.room)
+      const bActive = isEntityActive(b.room)
+      if (aActive !== bActive) return aActive ? -1 : 1
+      return a.room.name.localeCompare(b.room.name, 'de')
+    })
 })
 
 const selectedRoomCard = computed<RoomCard | null>(() => {
@@ -93,37 +140,43 @@ const selectedRoomChildren = computed<Child[]>(() => {
 
 const metrics = computed(() => {
   const cards = roomCards.value
-  const overCapacity = cards.filter((card) => card.status === 'over').length
-  const warningRooms = cards.filter(
+  // "Aktive Räume", "Warnungen" und "Überbelegung" zählen nur Räume mit
+  // is_active=true (inaktive Räume haben keine kapazitätsrelevante Aussage).
+  const activeCards = cards.filter((card) => isEntityActive(card.room))
+
+  // "Anwesende Kinder" hingegen zählt ALLE aktiven Kinder unabhängig vom
+  // Raum-Status — ein Kind in einem (jetzt) inaktiven Raum bleibt anwesend
+  // bis es ausgetragen wird oder der nächtliche Reset läuft.
+  const presentChildren = Object.values(store.occupancy).reduce((sum, snap) => {
+    const active = (snap.children ?? []).filter((c) => isEntityActive(c))
+    return sum + active.length
+  }, 0)
+
+  const overCapacity = activeCards.filter((card) => card.status === 'over').length
+  const warningRooms = activeCards.filter(
     (card) => card.status === 'warn' || card.status === 'over',
   ).length
 
   return {
-    activeRooms: cards.length,
-    presentChildren: cards.reduce((sum, card) => sum + card.occupancyCount, 0),
+    activeRooms: activeCards.length,
+    presentChildren,
     warningRooms,
     overCapacity,
   }
 })
 
 const filteredMovements = computed<Movement[]>(() => {
-  const roomQuery = ''
   const childQuery = normalizedChildSearch.value
 
   return store.latestMovements.filter((movement) => {
     const child = movement.child
     if (child && !isEntityActive(child)) return false
 
+    if (!childQuery) return true
+
     const childName = child?.name?.toLowerCase() ?? ''
     const childIdText = String(movement.child_id ?? '')
-    const toRoom = movement.to_room?.name?.toLowerCase() ?? ''
-    const fromRoom = movement.from_room?.name?.toLowerCase() ?? ''
-
-    const roomMatch = !roomQuery || toRoom.includes(roomQuery) || fromRoom.includes(roomQuery)
-    const childMatch =
-      !childQuery || childName.includes(childQuery) || childIdText.includes(childQuery)
-
-    return roomMatch && childMatch
+    return childName.includes(childQuery) || childIdText.includes(childQuery)
   })
 })
 
@@ -145,14 +198,59 @@ function closeRoomDetails() {
   selectedRoomId.value = null
 }
 
-async function checkoutChildFromRoom(child: Child, roomId: number) {
+function requestCheckout(child: Child, roomId: number) {
   if (checkoutInProgress.has(child.id)) return
-  checkoutInProgress.add(child.id)
+  pendingAction.value = {
+    type: 'checkout',
+    childId: child.id,
+    childName: child.name ?? `Kind #${child.id}`,
+    roomId,
+  }
+}
 
+function requestToggleRoom(room: Room) {
+  if (roomToggleInProgress.has(room.id)) return
+  const currentlyActive = isEntityActive(room)
+  pendingAction.value = {
+    type: 'toggleRoom',
+    roomId: room.id,
+    roomName: room.name ?? `Raum #${room.id}`,
+    targetActive: !currentlyActive,
+  }
+}
+
+async function onConfirmAction() {
+  const a = pendingAction.value
+  if (!a || confirmBusy.value) return
+
+  confirmBusy.value = true
   try {
-    await store.checkoutChild(child.id, roomId)
+    if (a.type === 'checkout') {
+      checkoutInProgress.add(a.childId)
+      try {
+        await store.checkoutChild(a.childId, a.roomId)
+      } finally {
+        checkoutInProgress.delete(a.childId)
+      }
+    } else {
+      roomToggleInProgress.add(a.roomId)
+      try {
+        await store.toggleRoomActive(a.roomId, a.targetActive)
+      } finally {
+        roomToggleInProgress.delete(a.roomId)
+      }
+    }
+    pendingAction.value = null
+  } catch {
+    // Fehler bleibt im store.error, Dialog bleibt offen damit User nochmal probieren kann
   } finally {
-    checkoutInProgress.delete(child.id)
+    confirmBusy.value = false
+  }
+}
+
+function onCancelAction() {
+  if (!confirmBusy.value) {
+    pendingAction.value = null
   }
 }
 
@@ -171,22 +269,17 @@ onUnmounted(() => {
     <header class="dashboard-header">
       <div>
         <h2>Dashboard</h2>
-        <p class="muted">Snapshot + Live-Events in einer kompakten Übersicht.</p>
+        <!--<p class="muted"></p>-->
       </div>
       <span class="connection" :class="{ online: store.sseConnected }">
-        {{ store.sseConnected ? 'SSE verbunden' : 'SSE verbindet…' }}
+        {{ store.sseConnected ? 'Live' : 'verbindet…' }}
       </span>
     </header>
 
     <div class="left-column">
       <div class="toolbar">
-        <input
-          v-model="childSearch"
-          type="search"
-          class="input"
-          placeholder="Kinder suchen…"
-          aria-label="Kinder suchen"
-        />
+        <input v-model="childSearch" type="search" class="input" placeholder="Kinder suchen…"
+          aria-label="Kinder suchen" />
       </div>
 
       <p v-if="store.loading" class="info">Dashboard wird geladen…</p>
@@ -196,43 +289,10 @@ onUnmounted(() => {
         <div v-if="!roomCards.length" class="empty-state">Keine passenden Kinder gefunden.</div>
 
         <div v-else class="rooms-grid">
-          <article
-            v-for="card in roomCards"
-            :key="card.room.id"
-            class="room"
-            :class="card.status"
-            role="button"
-            tabindex="0"
-            :aria-label="`Raum ${card.room.name} anzeigen`"
-            @click="openRoomDetails(card.room.id)"
-            @keydown.enter.prevent="openRoomDetails(card.room.id)"
-            @keydown.space.prevent="openRoomDetails(card.room.id)"
-          >
-            <header class="room-header">
-              <h3>{{ card.room.name }}</h3>
-              <span class="capacity">{{ card.occupancyCount }} / {{ card.capacityLabel }}</span>
-            </header>
-
-            <div class="capacity-track" v-if="card.room.capacity">
-              <div class="capacity-bar" :style="{ width: `${card.occupancyRatio}%` }" />
-            </div>
-
-            <ul v-if="card.visibleChildren.length" class="child-list">
-              <li v-for="child in card.visibleChildren" :key="child.id" class="child-item">
-                <img
-                  v-if="child.photo_url"
-                  :src="child.photo_url"
-                  :alt="`Foto von ${child.name}`"
-                  class="avatar"
-                />
-                <span v-else class="avatar placeholder">{{
-                  child.name.charAt(0).toUpperCase()
-                }}</span>
-                <span>{{ child.name }}</span>
-              </li>
-            </ul>
-            <p v-else class="muted">Keine passenden Kinder.</p>
-          </article>
+          <RoomCard v-for="card in roomCards" :key="card.room.id" :room="card.room" :snapshot="card.snapshot"
+            :visible-children="card.visibleChildren" :occupancy-count="card.occupancyCount"
+            :capacity-label="card.capacityLabel" :occupancy-ratio="card.occupancyRatio" :status="card.status"
+            @open="openRoomDetails" />
         </div>
       </section>
     </div>
@@ -261,16 +321,24 @@ onUnmounted(() => {
         <h3>Letzte Bewegungen</h3>
 
         <ul v-if="filteredMovements.length" class="movement-list">
-          <li
-            v-for="movement in filteredMovements"
-            :key="movement.id ?? `${movement.child_id}-${movement.occurred_at}`"
-          >
+          <li v-for="movement in filteredMovements"
+            :key="movement.id ?? `${movement.child_id}-${movement.occurred_at}`">
             <div class="movement-main">
               <strong>{{ movement.child?.name ?? `Kind #${movement.child_id ?? '?'}` }}</strong>
-              <span class="arrow"
-                >{{ movement.from_room?.name ?? '?' }} → {{ movement.to_room?.name ?? '?' }}</span
-              >
+
+              <span class="arrow">
+                <span :class="movement.from_room?.name ? '' : 'status-entered'">
+                  {{ movement.from_room?.name ?? 'Eingetragen' }}
+                </span>
+
+                →
+
+                <span :class="movement.to_room?.name ? '' : 'status-logged-out'">
+                  {{ movement.to_room?.name ?? 'Abgemeldet' }}
+                </span>
+              </span>
             </div>
+
             <time>{{ formatDateTime(movement.occurred_at) }}</time>
           </li>
         </ul>
@@ -282,49 +350,69 @@ onUnmounted(() => {
       <div class="room-modal" role="dialog" aria-modal="true" @click.stop>
         <header class="room-modal-header">
           <div>
-            <h3>{{ selectedRoomCard.room.name }}</h3>
+            <h3>
+              {{ selectedRoomCard.room.name }}
+              <span v-if="!isEntityActive(selectedRoomCard.room)" class="inactive-pill">inaktiv</span>
+            </h3>
             <p class="muted">
               {{ selectedRoomCard.occupancyCount }} / {{ selectedRoomCard.capacityLabel }} Kinder
             </p>
           </div>
-          <button
-            class="icon-button"
-            type="button"
-            @click="closeRoomDetails"
-            aria-label="Schließen"
-          >
+          <button class="icon-button" type="button" @click="closeRoomDetails" aria-label="Schließen">
             ×
           </button>
         </header>
 
-        <ul v-if="selectedRoomChildren.length" class="child-list modal-child-list">
-          <li v-for="child in selectedRoomChildren" :key="child.id" class="child-item">
-            <img
-              v-if="child.photo_url"
-              :src="child.photo_url"
-              :alt="`Foto von ${child.name}`"
-              class="avatar"
-            />
-            <span v-else class="avatar placeholder">{{ child.name.charAt(0).toUpperCase() }}</span>
-            <span class="child-name">{{ child.name }}</span>
-            <button
-              class="remove-child"
-              type="button"
-              :disabled="checkoutInProgress.has(child.id)"
-              :aria-label="`${child.name} austragen`"
-              @click.stop="checkoutChildFromRoom(child, selectedRoomCard.room.id)"
-            >
-              {{ checkoutInProgress.has(child.id) ? '…' : '✕' }}
+        <ul v-if="selectedRoomChildren.length" class="modal-child-list">
+          <li v-for="child in selectedRoomChildren" :key="child.id" class="modal-child-item">
+            <ChildBadge :child="child" size="md" class="child-badge-spacing"/>
+            <button v-if="auth.isAuthenticated" class="remove-child" type="button"
+              :disabled="checkoutInProgress.has(child.id)" :aria-label="`${child.name} austragen`"
+              @click.stop="requestCheckout(child, selectedRoomCard.room.id)">
+              {{ checkoutInProgress.has(child.id) ? '…' : '↪' }}
             </button>
           </li>
         </ul>
         <p v-else class="muted">Keine Kinder im Raum.</p>
+
+        <footer v-if="auth.isAuthenticated" class="room-modal-footer">
+          <button type="button" class="room-toggle" :class="{ activate: !isEntityActive(selectedRoomCard.room) }"
+            :disabled="roomToggleInProgress.has(selectedRoomCard.room.id)"
+            @click="requestToggleRoom(selectedRoomCard.room)">
+            {{
+              roomToggleInProgress.has(selectedRoomCard.room.id)
+                ? '…'
+                : isEntityActive(selectedRoomCard.room)
+                  ? 'Raum deaktivieren'
+                  : 'Raum aktivieren'
+            }}
+          </button>
+        </footer>
       </div>
     </div>
+
+    <ConfirmDialog :model-value="pendingAction !== null" :title="confirmConfig?.title ?? ''"
+      :message="confirmConfig?.message ?? ''" :confirm-label="confirmConfig?.confirmLabel ?? 'Bestätigen'"
+      :variant="confirmConfig?.variant ?? 'default'" :busy="confirmBusy"
+      @update:model-value="(v) => { if (!v) onCancelAction() }" @confirm="onConfirmAction" @cancel="onCancelAction" />
   </div>
 </template>
 
 <style scoped>
+.child-badge-spacing {
+  margin-right: 0.5rem;
+}
+
+.status-entered {
+  color: #2563eb; /* blau */
+  font-weight: 600;
+}
+
+.status-logged-out {
+  color: #dc2626; /* rot */
+  font-weight: 600;
+}
+
 /* ===== MAIN LAYOUT ===== */
 .dashboard {
   display: grid;
@@ -665,6 +753,61 @@ time {
   max-height: 320px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.room-modal-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.room-toggle {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #dc2626;
+  background: white;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.room-toggle:hover:not(:disabled) {
+  background: #dc2626;
+  color: white;
+}
+
+.room-toggle.activate {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.room-toggle.activate:hover:not(:disabled) {
+  background: #16a34a;
+  color: white;
+}
+
+.room-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inactive-pill {
+  display: inline-block;
+  margin-left: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.7em;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 /* ===== RESPONSIVE ===== */

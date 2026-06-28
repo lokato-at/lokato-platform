@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 import type { AdminDevice, AdminRoom } from "@/stores/adminDataStore";
+import { useToast } from "@/composables/useToast";
+import ConfirmDialog from "@/components/ConfirmDialog.vue";
 
 type ActiveFilter = "all" | "active" | "inactive";
 
 const store = useAdminDataStore();
+const { success, error: toastError } = useToast();
 const searchTerm = ref("");
 const roomFilter = ref<string>("all");
 const activeFilter = ref<ActiveFilter>("all");
 const editingId = ref<number | null>(null);
+
+const formCardRef = ref<HTMLElement | null>(null);
+const nameInputRef = ref<HTMLInputElement | null>(null);
+
+const pendingDelete = ref<AdminDevice | null>(null);
+const deleteBusy = ref(false);
 
 const form = reactive({
   name: "",
@@ -96,12 +105,16 @@ function resetForm() {
   form.is_active = true;
 }
 
-function openEdit(device: AdminDevice) {
+async function openEdit(device: AdminDevice) {
   editingId.value = device.id;
   form.name = device.name ?? "";
   form.device_key = device.device_key ?? "";
   form.room_id = String(device.room_id ?? device.room?.id ?? "");
   form.is_active = activeValue(device) ?? true;
+
+  await nextTick();
+  formCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  nameInputRef.value?.focus();
 }
 
 function buildPayload() {
@@ -122,24 +135,54 @@ async function saveDevice() {
   if (!form.name.trim()) return;
 
   const payload = buildPayload();
+  const isEdit = editingId.value !== null;
+  const deviceName = form.name.trim();
 
-  if (editingId.value) {
-    await store.updateDevice(editingId.value, payload as Partial<AdminDevice>);
+  store.clearError();
+  if (isEdit) {
+    await store.updateDevice(editingId.value as number, payload as Partial<AdminDevice>);
   } else {
     await store.createDevice(payload as Pick<AdminDevice, "name"> & Partial<AdminDevice>);
   }
 
+  if (store.error) {
+    toastError(store.error);
+    return;
+  }
+  success(isEdit ? `"${deviceName}" wurde gespeichert` : `"${deviceName}" wurde erstellt`);
   resetForm();
 }
 
-async function remove(device: AdminDevice) {
+function requestDelete(device: AdminDevice) {
   if (!device.id) return;
+  pendingDelete.value = device;
+}
+
+async function confirmDelete() {
+  if (!pendingDelete.value || deleteBusy.value) return;
+  const device = pendingDelete.value;
+
+  deleteBusy.value = true;
+  store.clearError();
   await store.deleteDevice(device.id);
-  if (editingId.value === device.id) resetForm();
+
+  if (store.error) {
+    toastError(store.error);
+  } else {
+    success(`"${device.name}" wurde gelöscht`);
+    if (editingId.value === device.id) resetForm();
+    pendingDelete.value = null;
+  }
+  deleteBusy.value = false;
 }
 
 onMounted(async () => {
   await Promise.all([store.loadDevices(), store.loadRooms()]);
+  store.connectSSE();
+});
+
+onUnmounted(() => {
+  store.disconnectSSE();
 });
 </script>
 
@@ -154,10 +197,10 @@ onMounted(async () => {
 
     <p v-if="store.error" class="error">{{ store.error }}</p>
 
-    <section class="form-card">
+    <section ref="formCardRef" class="form-card">
       <h3>{{ editingId ? "Gerät bearbeiten" : "Neues Gerät" }}</h3>
       <form class="form-grid" @submit.prevent="saveDevice">
-        <input v-model="form.name" type="text" class="input" placeholder="Name" required />
+        <input ref="nameInputRef" v-model="form.name" type="text" class="input" placeholder="Name" required />
         <input v-model="form.device_key" type="text" class="input" placeholder="Device Key" />
 
         <select v-model="form.room_id" class="select" required>
@@ -234,10 +277,24 @@ onMounted(async () => {
 
         <div class="actions">
           <button class="edit-btn" @click="openEdit(device)">Bearbeiten</button>
-          <button class="delete-btn" @click="remove(device)">Löschen</button>
+          <button class="delete-btn" @click="requestDelete(device)">Löschen</button>
         </div>
       </li>
     </ul>
+
+    <ConfirmDialog
+      :model-value="pendingDelete !== null"
+      title="Gerät löschen?"
+      :message="pendingDelete
+        ? `&quot;${pendingDelete.name}&quot; wird gelöscht. Die Bewegungs-History bleibt erhalten (das Gerätefeld in alten Movements wird auf „—“ gesetzt).`
+        : ''"
+      confirm-label="Löschen"
+      variant="danger"
+      :busy="deleteBusy"
+      @update:model-value="(v) => { if (!v) pendingDelete = null }"
+      @confirm="confirmDelete"
+      @cancel="() => (pendingDelete = null)"
+    />
   </section>
 </template>
 
@@ -252,5 +309,13 @@ onMounted(async () => {
   .form-grid, .toolbar { grid-template-columns: 1fr; }
   .device-item { grid-template-columns: 1fr; align-items: start; }
   .badges { justify-items: start; }
+}
+
+.view-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
 }
 </style>

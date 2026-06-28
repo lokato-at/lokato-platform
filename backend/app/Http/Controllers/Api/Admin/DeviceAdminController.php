@@ -6,10 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Device\DeviceStoreRequest;
 use App\Http\Requests\Admin\Device\DeviceUpdateRequest;
 use App\Models\Device;
+use App\Support\SseChangeSignal;
 use Illuminate\Http\JsonResponse;
 
 class DeviceAdminController extends Controller
 {
+    public function __construct(
+        private readonly SseChangeSignal $sseChangeSignal,
+    ) {
+    }
+
     public function index(): JsonResponse
     {
         $devices = Device::query()
@@ -26,6 +32,8 @@ class DeviceAdminController extends Controller
         $data = $request->validated();
 
         $device = Device::create($data);
+
+        $this->sseChangeSignal->bumpChildren();
 
         return response()->json($device, 201);
     }
@@ -44,12 +52,16 @@ class DeviceAdminController extends Controller
         $device->fill($data);
         $device->save();
 
+        $this->sseChangeSignal->bumpChildren();
+
         return response()->json($device);
     }
 
     public function destroy(Device $device): JsonResponse
     {
         $device->delete();
+
+        $this->sseChangeSignal->bumpChildren();
 
         return response()->json([
             'message' => 'Device deleted',

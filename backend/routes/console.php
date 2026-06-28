@@ -1,15 +1,10 @@
 <?php
 
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment('Keep shipping stable software.');
-});
-
-Schedule::call(function (): void {
-    Artisan::call('children:daily-active-reset');
-})
-    ->name('children-daily-active-reset')
-    ->timezone(env('APP_TIMEZONE', 'Europe/Vienna'))
-    ->dailyAt('01:00');
+// Cached scheduler definition (uses Schedule::command instead of Schedule::call
+// with a Closure so that `schedule:cache` can serialize it).
+Schedule::command('children:daily-active-reset')
+    ->dailyAt('01:00')
+    ->timezone(config('app.timezone', 'Europe/Vienna'))
+    ->name('children-daily-active-reset');

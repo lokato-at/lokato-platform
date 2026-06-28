@@ -43,9 +43,9 @@ class DailyActiveResetCommand extends Command
                 );
             }
 
-            // SSE-Clients aufwecken: alle offenen Dashboards/Tablets sollen
-            // ihren naechsten Poll-Tick die jetzt leeren Raeume sehen.
-            $sseChangeSignal->bump();
+            // bumpChildren() (nicht bump()): Reset schreibt keine MovementLog-Eintraege,
+            // sonst sieht der SSE-Loop die geleerten Raum-Snapshots nicht.
+            $sseChangeSignal->bumpChildren();
 
             AppLogger::event('cron', 'daily_reset_finished', [
                 'reset_date' => $resetDate,

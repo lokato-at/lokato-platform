@@ -5,12 +5,24 @@ namespace Tests\Feature;
 use App\Models\Child;
 use App\Models\Device;
 use App\Models\Room;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AdminSummaryTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Sanctum::actingAs(User::create([
+            'name' => 'Test Admin',
+            'email' => 'test-admin@lokato.test',
+            'password' => bcrypt('test-pass'),
+        ]));
+    }
 
     public function test_admin_summary_returns_fast_counts_without_loading_full_collections(): void
     {

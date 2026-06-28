@@ -36,24 +36,19 @@ Die Navigation wird zentral über Vue Router definiert.
 Struktur & Routen:
 
 *   / → Redirect auf /dashboard
-    
 *   /dashboard → DashboardView
-    
+*   /login → LoginView (Sanctum-Bearer-Auth)
+*   /tablet/:roomId → RoomTabletView (eine Tablet-Instanz pro Raum)
 *   /admin/home → AdminView (Übersicht)
-    
 *   /admin/children → ChildrenAdminView
-    
 *   /admin/rooms → RoomsAdminView
-    
 *   /admin/devices → DevicesAdminView
-    
 *   /admin/movements → MovementAdminView
-    
 
 Eigenschaften:
 
-*   client-seitige Navigation ohne Page Reload
-    
+*   Hash-Modus (`#/dashboard`, `#/tablet/3`, …) — Server muss nicht auf Routes konfiguriert sein
+*   Admin-Routen sind durch den Router-Guard (authStore) geschuetzt
 *   Fallback-Route leitet unbekannte URLs auf /dashboard
     
 
@@ -72,6 +67,19 @@ Zeigt:
 
 Reagiert live auf Backend-Events über Server-Sent Events (SSE).
 
+RoomTabletViewDarstellung fuer ein wandmontiertes Raumtablet (eine Instanz pro Raum).
+
+Zeigt:
+
+*   aktuelle Belegung mit Fotos der anwesenden Kinder
+*   Warn-/Ueberbelegt-Anzeige (gelb/rot) basierend auf Capacity + Tolerance
+*   "Raum geschlossen"-Banner wenn der Raum auf inaktiv gestellt ist
+*   Willkommens-Animation beim Eintreffen eines Kindes (mit Cooldown)
+
+Reagiert ausschliesslich auf SSE-Events; kein Polling.
+
+LoginViewSanctum-basierter Login fuer Hort-Personal. Persistente Session via localStorage.
+
 AdminView (Admin-Home)Zentrale Einstiegsseite für den Administrationsbereich.
 
 Zeigt aggregierte Informationen:
@@ -87,16 +95,24 @@ Dient als Einstiegspunkt zu allen Admin-Funktionen.
 
 Admin-Views (src/views/admin)
 
-*   ChildrenAdminViewCRUD-Verwaltung von Kindern
-    
-*   RoomsAdminViewVerwaltung von Räumen inklusive Metadaten
-    
+*   ChildrenAdminViewCRUD-Verwaltung von Kindern inkl. Foto-Upload
+*   RoomsAdminViewVerwaltung von Räumen inklusive Capacity und Tolerance
 *   DevicesAdminViewVerwaltung von Scanner-Geräten und Raumzuordnung
-    
 *   MovementAdminViewSimulation von Scan- und Bewegungsereignissen
-    
 
 Alle Admin-Views greifen ausschließlich auf den AdminDataStore zu.
+
+Wiederverwendbare Komponenten (src/components)
+
+*   ChildPhoto — laedt Foto mit Fallback-Kette (DB-URL → Convention-Pfad → Initialen)
+*   ChildBadge — kompakte Kind-Darstellung mit Status-Indikator
+*   ConfirmDialog — Modal mit `default` und `danger` Variante (fuer Delete)
+*   ToastStack — globaler Toast-Renderer (Teleport)
+
+Composables (src/composables)
+
+*   useBranding — Branding-Config (Logo, Primary-Color, Animationen)
+*   useToast — globaler Toast-Stack (`success`/`error`/`info`)
 
 🗂 State-Management (Pinia Stores)
 
@@ -162,7 +178,8 @@ Es gibt **einen einzigen** SSE-Endpoint im Backend (`GET /api/stream`). Modus un
 Der Store registriert sich auf folgende benannte Events:
 
 *   `child.moved` — Bewegungs-Eintrag
-*   `room.occupancy.updated` — neuer Snapshot für einen Raum
+*   `room.occupancy.updated` — neuer Snapshot fuer einen Raum inkl. `status.{over_capacity, within_tolerance}`
+*   `room.status.updated` — Raum-Metadaten geaendert (Name, Capacity, is_active, …)
 *   `room.alert.raised` — Alert (Kapazitäts-Überschreitung etc.)
 *   `stream.ready` — initial nach Connect (Cursor-Position)
 *   `stream.draining` — Server fordert Reconnect (Connection-Lifetime erreicht)
@@ -173,18 +190,23 @@ Im Backend pollt der SSE-Controller alle 500 ms, **aber** mit Cache-Gate (`App\S
 *   Scan→UI-Latenz < 500 ms
 *   Automatische Aktualisierung ohne Browser-seitiges Polling
 
-3️⃣ DevDataStore (nur Entwicklung)
+3️⃣ RoomTabletStore
 
-Zweck:Reiner Entwicklungs- und Test-Store.
+Zweck: Versorgt die Tablet-Ansicht eines einzelnen Raums.
 
-*   Lädt alle öffentlichen und Admin-Endpunkte
-    
-*   Testet Detail-Routen mit Beispiel-IDs
-    
-*   Prüft Pagination und Datenformate
-    
+*   laedt Initial-Snapshot ueber `GET /rooms/{id}/occupancy`
+*   haelt eine gescopte SSE-Verbindung (`/api/stream?room=X&initial=1`)
+*   merged capacity/tolerance/status aus den Events in `snapshot.room` damit der
+    Header live einfaerben kann (gelb/rot)
 
-Dieser Store ist nicht für den Produktivbetrieb gedacht.
+4️⃣ AuthStore
+
+Zweck: Sanctum-Bearer-Token-Login.
+
+*   `login(email, password)` -> Token + User, persistent in localStorage
+*   `logout()` -> Server-Side Token-Revoke + State-Cleanup
+*   `refreshUser()` -> Token-Validitaet pruefen (`/auth/me`)
+*   axios-Interceptor haengt Bearer-Token automatisch an Admin-Calls
 
 🔌 Backend-Kommunikation
 

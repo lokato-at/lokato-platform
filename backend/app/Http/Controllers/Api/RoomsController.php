@@ -77,6 +77,11 @@ class RoomsController extends Controller
                 'area' => $room->area,
                 'capacity' => $room->capacity,
                 'tolerance' => $room->tolerance,
+                // Tablet-View braucht is_active fuer den "Raum geschlossen"-Banner.
+                // SSE-Events (room.status.updated) liefern es schon, der Initial-
+                // Snapshot beim Tablet-Open ist die einzige Stelle, an der wir es
+                // nochmal mitgeben muessen.
+                'is_active' => (bool) $room->is_active,
             ],
             'current_count' => (int) $snapshot['current_count'],
             'children' => $snapshot['children'],

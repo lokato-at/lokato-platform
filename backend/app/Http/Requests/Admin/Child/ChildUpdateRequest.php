@@ -22,7 +22,7 @@ class ChildUpdateRequest extends FormRequest
             'photo_url'   => ['sometimes', 'nullable', 'url', 'max:255'],
             'tracker_uid' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:100',
                 Rule::unique('children', 'tracker_uid')->ignore(

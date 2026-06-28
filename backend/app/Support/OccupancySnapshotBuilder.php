@@ -25,10 +25,17 @@ class OccupancySnapshotBuilder
             return collect();
         }
 
+        // Nur AKTIVE Kinder werden als anwesend gezählt. Inaktive Kinder
+        // bleiben evtl. noch in child_locations (z.B. zwischen Checkout und
+        // DailyActiveReset), sollen aber weder im current_count noch in der
+        // children-Liste auftauchen — sonst zeigen Tablet/Dashboard "Geister-
+        // belegung" von Kindern die de facto nicht da sind.
         $counts = DB::table('child_locations')
-            ->select('room_id', DB::raw('COUNT(*) as current_count'))
-            ->whereIn('room_id', $roomIds)
-            ->groupBy('room_id')
+            ->join('children', 'children.id', '=', 'child_locations.child_id')
+            ->select('child_locations.room_id', DB::raw('COUNT(*) as current_count'))
+            ->whereIn('child_locations.room_id', $roomIds)
+            ->where('children.is_active', true)
+            ->groupBy('child_locations.room_id')
             ->pluck('current_count', 'room_id');
 
         $childrenByRoom = collect();
@@ -37,6 +44,7 @@ class OccupancySnapshotBuilder
             $childrenByRoom = DB::table('child_locations')
                 ->join('children', 'children.id', '=', 'child_locations.child_id')
                 ->whereIn('child_locations.room_id', $roomIds)
+                ->where('children.is_active', true)
                 ->orderBy('children.name')
                 ->get([
                     'child_locations.room_id',
@@ -44,6 +52,7 @@ class OccupancySnapshotBuilder
                     'children.id',
                     'children.name',
                     'children.photo_url',
+                    'children.is_active',
                 ])
                 ->groupBy('room_id')
                 ->map(fn (Collection $rows) => $rows->map(fn ($row) => [
@@ -51,6 +60,7 @@ class OccupancySnapshotBuilder
                     'id' => (int) $row->id,
                     'name' => $row->name,
                     'photo_url' => $row->photo_url,
+                    'is_active' => (bool) $row->is_active,
                     'updated_at' => $row->updated_at ? CarbonImmutable::parse($row->updated_at)->toIso8601String() : null,
                 ])->values()->all());
         }

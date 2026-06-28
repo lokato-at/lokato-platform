@@ -5,10 +5,11 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     vue(),
-    vueDevTools(),
+    // vue-devtools only in dev — keeps the production bundle lean
+    ...(command === 'serve' ? [vueDevTools()] : []),
   ],
   server: {
     port: 5173,
@@ -26,4 +27,4 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
-})
+}))

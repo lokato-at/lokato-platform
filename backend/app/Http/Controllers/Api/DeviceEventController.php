@@ -28,17 +28,14 @@ class DeviceEventController extends Controller
             requestIp: $request->ip(),
         );
 
+        // null = Device/Child nicht gefunden ODER Same-Room-Skip. In beiden Faellen
+        // 200 + movement:null antworten, sonst retried Scanner-Firmware endlos.
+        // Grund steht im "scan"-Log-Channel.
         if ($result === null) {
-            Log::channel('scan')->warning('Scan rejected because relation lookup failed', [
-                'device_key' => $validated['device_key'],
-                'tracker_uid' => $validated['tracker_uid'],
-                'ip' => $request->ip(),
-            ]);
-
             return response()->json([
-                'error' => 'scan_target_not_found',
-                'message' => 'Gerät oder Kind konnte nicht gefunden werden.',
-            ], 404);
+                'status' => 'ok',
+                'movement' => null,
+            ]);
         }
 
         $this->sseChangeSignal->bump();

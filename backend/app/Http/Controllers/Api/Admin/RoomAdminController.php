@@ -6,11 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Room\RoomStoreRequest;
 use App\Http\Requests\Admin\Room\RoomUpdateRequest;
 use App\Models\Room;
+use App\Support\SseChangeSignal;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 
 class RoomAdminController extends Controller
 {
+    public function __construct(
+        private readonly SseChangeSignal $sseChangeSignal,
+    ) {
+    }
+
     public function index(): JsonResponse
     {
         $rooms = Room::query()
@@ -30,6 +36,10 @@ class RoomAdminController extends Controller
 
         $room = Room::create($data);
 
+        // bumpChildren statt bump: neuer Raum hat keinen MovementLog, der SSE-Loop
+        // wuerde ihn sonst erst beim naechsten Scan emittieren.
+        $this->sseChangeSignal->bumpChildren();
+
         return response()->json($room, 201);
     }
 
@@ -42,6 +52,8 @@ class RoomAdminController extends Controller
     {
         $room->fill($request->validated());
         $room->save();
+
+        $this->sseChangeSignal->bump();
 
         return response()->json($room);
     }
@@ -56,6 +68,8 @@ class RoomAdminController extends Controller
                 'error' => $e->getCode(),
             ], 409);
         }
+
+        $this->sseChangeSignal->bump();
 
         return response()->json([
             'message' => 'Room deleted',

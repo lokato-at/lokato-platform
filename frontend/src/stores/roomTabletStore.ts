@@ -18,8 +18,14 @@ export interface RoomOccupancyPayload {
 export interface RoomOccupancyUpdatePayload {
   room_id: number;
   room_name?: string;
+  capacity?: number | null;
+  tolerance?: number | null;
   current_count?: number;
   children?: Child[];
+  status?: {
+    over_capacity?: boolean;
+    within_tolerance?: boolean;
+  };
 }
 
 function parseJsonSafely<T>(value: string): T | null {
@@ -77,10 +83,8 @@ export const useRoomTabletStore = defineStore("roomTabletStore", {
 
       this.roomId = roomId;
 
-      // Last-Event-ID als Query-Param weiterreichen — Browser setzt den Header
-      // nicht bei manuell konstruierten Reconnects (nach stream.draining).
-      // Initial-Snapshot beim Reconnect ist semantisch ok (handleOccupancyUpdate
-      // ueberschreibt idempotent).
+      // Last-Event-ID als Query-Param, weil der Browser den Header bei manuell
+      // konstruierten Reconnects (nach stream.draining) nicht setzt.
       const params = new URLSearchParams({ room: String(roomId), initial: "1" });
       if (this.lastEventId) params.set("last_event_id", this.lastEventId);
       this.sse = new EventSource(buildApiUrl(`/stream?${params.toString()}`));
@@ -101,6 +105,17 @@ export const useRoomTabletStore = defineStore("roomTabletStore", {
         this.lastEventId = e.lastEventId || this.lastEventId;
         const payload = parseJsonSafely<unknown>(e.data);
         console.warn("[RoomTabletStore] Room alert", payload);
+      });
+
+      this.sse.addEventListener("room.status.updated", (e: MessageEvent) => {
+        this.lastEventId = e.lastEventId || this.lastEventId;
+        const payload = parseJsonSafely<Room>(e.data);
+        if (payload && payload.id === this.roomId) {
+          this.snapshot = {
+            ...this.snapshot,
+            room: { ...this.snapshot.room, ...payload },
+          };
+        }
       });
 
       this.sse.addEventListener("stream.draining", () => {
@@ -129,9 +144,20 @@ export const useRoomTabletStore = defineStore("roomTabletStore", {
 
       const existingRoom = this.snapshot.room;
       const roomName = payload.room_name ?? existingRoom?.name ?? `Room ${payload.room_id}`;
-      const room: Room = existingRoom
-        ? { ...existingRoom, name: roomName }
-        : { id: payload.room_id, name: roomName };
+      // capacity/tolerance/status muessen ins room-Objekt, damit der Tablet-Header
+      // live einfaerbt (warn/over).
+      const room: Room = {
+        ...(existingRoom ?? { id: payload.room_id, name: roomName }),
+        name: roomName,
+        capacity: typeof payload.capacity === "number" ? payload.capacity : existingRoom?.capacity,
+        tolerance: typeof payload.tolerance === "number" ? payload.tolerance : existingRoom?.tolerance,
+        status: payload.status
+          ? {
+              over_capacity: payload.status.over_capacity ?? false,
+              within_tolerance: payload.status.within_tolerance ?? false,
+            }
+          : existingRoom?.status,
+      };
 
       const children = payload.children ?? [];
 

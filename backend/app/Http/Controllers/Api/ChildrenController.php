@@ -6,12 +6,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Child;
 use App\Models\ChildLocation;
 use App\Models\MovementLog;
+use App\Support\SseChangeSignal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ChildrenController extends Controller
 {
+    public function __construct(
+        private readonly SseChangeSignal $sseChangeSignal,
+    ) {
+    }
+
     /**
      * GET /api/v1/children
      * Liste aller Kinder mit aktuellem Standort
@@ -116,6 +122,11 @@ class ChildrenController extends Controller
                 'occurred_at' => $occurredAt,
             ]);
         });
+
+        // SSE-Loop aufwecken — sonst kriegen Dashboards/Tablets den Checkout
+        // erst beim nächsten ohnehin-anstehenden DB-Poll mit, im Worst Case
+        // garnicht solange das Cache-Gate idle bleibt.
+        $this->sseChangeSignal->bump();
 
         return response()->json([
             'child_id' => $child->id,

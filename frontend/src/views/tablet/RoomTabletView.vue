@@ -114,8 +114,9 @@ onUnmounted(() => {
             </svg></button>
       <div class="status">
         <div class="statusbar">
-          <div class="satusfill"> {{ statusBarUpdate(currentCount) }}</div>
+          <div class="statusfill"> </div>
         </div>
+        
         <span class="count">{{ currentCount }}</span>
         <span class="capacity">/ {{ capacityLabel }}</span>
         <span class="connection" :class="{ online: store.sseConnected }">
@@ -160,14 +161,14 @@ onUnmounted(() => {
   background: linear-gradient(180deg, #B4D2E8 0%, #D2B6E3 100%);
   color: #0f172a;
 }
-
+ /*
 .tablet-header {
-  /* display: flex;
+  display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 24px;
-  text-align: center; */
-}
+  text-align: center; 
+}*/
 
 .shape {
   position: absolute;
@@ -207,10 +208,12 @@ onUnmounted(() => {
 }
 
 .status {
-  display: grid;
-  justify-items: end;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 6px;
   text-align: right;
+  
   
 }
 
@@ -225,10 +228,15 @@ onUnmounted(() => {
             box-shadow: 5px 4px 4px 0 rgba(56, 64, 201, 0.50), 0 4px 4px 0 rgba(56, 64, 201, 0.25) inset;
 }
 
-.satusfill {
-  height: 46px;
-  width: null;
-  left:13px;
+.statusfill {
+  justify-self: flex-start;
+  
+  position: relative;
+  height: 38px;
+  width: 50px;
+  top: 8px;
+  left:8px;
+  max-width: 290px;
   
   border-radius: 36px;
   background: linear-gradient(90deg, rgba(216, 72, 47, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #F3EE4C;
@@ -348,7 +356,7 @@ box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset;
 .avatar {
   width: 48px;
   height: 48px;
-  border-radius: 999px;
+  border-radius: 18px;
   object-fit: cover;
 }
 

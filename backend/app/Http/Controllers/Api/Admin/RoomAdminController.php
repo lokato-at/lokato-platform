@@ -36,6 +36,10 @@ class RoomAdminController extends Controller
 
         $room = Room::create($data);
 
+        // bumpChildren statt bump: neuer Raum hat keinen MovementLog, der SSE-Loop
+        // wuerde ihn sonst erst beim naechsten Scan emittieren.
+        $this->sseChangeSignal->bumpChildren();
+
         return response()->json($room, 201);
     }
 
@@ -49,8 +53,6 @@ class RoomAdminController extends Controller
         $room->fill($request->validated());
         $room->save();
 
-        // SSE-Bump damit Dashboard/Tablet das aktualisierte is_active / name /
-        // capacity sofort sehen, ohne auf die nächste Bewegung warten zu müssen.
         $this->sseChangeSignal->bump();
 
         return response()->json($room);

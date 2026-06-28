@@ -43,6 +43,24 @@ class ScanIngestService
             $fromRoomId = $currentLocation?->room_id;
             $toRoomId = $device->room_id;
 
+            // Same-Room-Scan komplett ignorieren — verhindert "Obergeschoss → Obergeschoss"
+            // Movement-Eintraege wenn ein Kind den Raum nicht wechselt (z.B. zweiter Scan
+            // an derselben Tuer kurz hintereinander). Wir aktualisieren Device.last_seen
+            // trotzdem (damit "Geraet zuletzt gesehen" stimmt), aber sonst nichts.
+            if ($fromRoomId !== null && $fromRoomId === $toRoomId) {
+                Device::query()->whereKey($device->id)->update(['last_seen' => now()]);
+
+                AppLogger::event('scan', 'scan_same_room_ignored', [
+                    'device_id' => $device->id,
+                    'child_id' => $child->id,
+                    'room_id' => $toRoomId,
+                    'source' => $source,
+                    'ip' => $requestIp,
+                ], AppLogger::shouldLogDiagnostics('scan') ? 'info' : 'debug');
+
+                return null;
+            }
+
             $movement = MovementLog::create([
                 'child_id' => $child->id, 'from_room_id' => $fromRoomId, 'to_room_id' => $toRoomId, 'device_id' => $device->id, 'source' => $source, 'occurred_at' => $occurredAt,
             ]);

@@ -1,14 +1,31 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useAdminDataStore } from "@/stores/adminDataStore";
 import type { AdminRoom } from "@/stores/adminDataStore";
+import { useToast } from "@/composables/useToast";
+import ConfirmDialog from "@/components/ConfirmDialog.vue";
 
 type ActiveFilter = "all" | "active" | "inactive";
 
 const store = useAdminDataStore();
+const { success, error: toastError } = useToast();
 const searchTerm = ref("");
 const activeFilter = ref<ActiveFilter>("all");
 const editingId = ref<number | null>(null);
+
+const formCardRef = ref<HTMLElement | null>(null);
+const nameInputRef = ref<HTMLInputElement | null>(null);
+
+const pendingDelete = ref<AdminRoom | null>(null);
+const deleteBusy = ref(false);
+
+// Anzahl Devices die diesem Raum zugeordnet sind — wichtig für die Delete-
+// Warnung, weil FK restrictOnDelete heißt: Raum-Delete ist BLOCKIERT solange
+// noch Devices drin hängen.
+const pendingDeleteDeviceCount = computed(() => {
+  if (!pendingDelete.value) return 0;
+  return store.devices.filter((d) => d.room_id === pendingDelete.value!.id).length;
+});
 
 const form = reactive({
   name: "",
@@ -59,13 +76,17 @@ function resetForm() {
   form.is_active = true;
 }
 
-function openEdit(room: AdminRoom) {
+async function openEdit(room: AdminRoom) {
   editingId.value = room.id;
   form.name = room.name ?? "";
   form.area = room.area ?? "";
   form.capacity = room.capacity == null ? "" : String(room.capacity);
   form.tolerance = room.tolerance == null ? "" : String(room.tolerance);
   form.is_active = room.is_active ?? true;
+
+  await nextTick();
+  formCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  nameInputRef.value?.focus();
 }
 
 function buildPayload() {
@@ -85,24 +106,51 @@ async function saveRoom() {
   if (!form.name.trim()) return;
 
   const payload = buildPayload();
+  const isEdit = editingId.value !== null;
+  const roomName = form.name.trim();
 
-  if (editingId.value) {
-    await store.updateRoom(editingId.value, payload);
+  store.clearError();
+  if (isEdit) {
+    await store.updateRoom(editingId.value as number, payload);
   } else {
     await store.createRoom(payload as Pick<AdminRoom, "name"> & Partial<AdminRoom>);
   }
 
+  if (store.error) {
+    toastError(store.error);
+    return;
+  }
+  success(isEdit ? `"${roomName}" wurde gespeichert` : `"${roomName}" wurde erstellt`);
   resetForm();
 }
 
-async function remove(room: AdminRoom) {
+function requestDelete(room: AdminRoom) {
   if (!room.id) return;
+  pendingDelete.value = room;
+}
+
+async function confirmDelete() {
+  if (!pendingDelete.value || deleteBusy.value) return;
+  const room = pendingDelete.value;
+
+  deleteBusy.value = true;
+  store.clearError();
   await store.deleteRoom(room.id);
-  if (editingId.value === room.id) resetForm();
+
+  if (store.error) {
+    toastError(store.error);
+  } else {
+    success(`"${room.name}" wurde gelöscht`);
+    if (editingId.value === room.id) resetForm();
+    pendingDelete.value = null;
+  }
+  deleteBusy.value = false;
 }
 
 onMounted(() => {
+  // Devices auch laden, damit wir bei Delete die Cascade-Warnung anzeigen können.
   store.loadRooms();
+  store.loadDevices();
   store.connectSSE();
 });
 
@@ -122,10 +170,10 @@ onUnmounted(() => {
 
     <p v-if="store.error" class="error">{{ store.error }}</p>
 
-    <section class="form-card">
+    <section ref="formCardRef" class="form-card">
       <h3>{{ editingId ? "Raum bearbeiten" : "Neuer Raum" }}</h3>
       <form class="form-grid" @submit.prevent="saveRoom">
-        <input v-model="form.name" type="text" class="input" placeholder="Name" required />
+        <input ref="nameInputRef" v-model="form.name" type="text" class="input" placeholder="Name" required />
         <input v-model="form.area" type="text" class="input" placeholder="Bereich (optional)" />
         <input v-model="form.capacity" type="number" min="0" class="input" placeholder="Kapazität" />
         <input v-model="form.tolerance" type="number" min="0" class="input" placeholder="Toleranz" />
@@ -181,10 +229,26 @@ onUnmounted(() => {
 
         <div class="actions">
           <button class="edit-btn" @click="openEdit(room)">Bearbeiten</button>
-          <button class="delete-btn" @click="remove(room)">Löschen</button>
+          <button class="delete-btn" @click="requestDelete(room)">Löschen</button>
         </div>
       </li>
     </ul>
+
+    <ConfirmDialog
+      :model-value="pendingDelete !== null"
+      title="Raum löschen?"
+      :message="pendingDelete
+        ? (pendingDeleteDeviceCount > 0
+          ? `&quot;${pendingDelete.name}&quot; kann nicht gelöscht werden, solange ${pendingDeleteDeviceCount} Gerät(e) zugeordnet sind. Bitte zuerst die Geräte einem anderen Raum zuweisen oder löschen.`
+          : `&quot;${pendingDelete.name}&quot; wird gelöscht. Aktuelle Standorte der Kinder werden zurückgesetzt (Kinder selbst bleiben). Die Bewegungs-History bleibt erhalten, zeigt für diesen Raum aber „?“.`)
+        : ''"
+      :confirm-label="pendingDeleteDeviceCount > 0 ? 'Schließen' : 'Löschen'"
+      :variant="pendingDeleteDeviceCount > 0 ? 'default' : 'danger'"
+      :busy="deleteBusy"
+      @update:model-value="(v) => { if (!v) pendingDelete = null }"
+      @confirm="pendingDeleteDeviceCount > 0 ? (pendingDelete = null) : confirmDelete()"
+      @cancel="() => (pendingDelete = null)"
+    />
   </section>
 </template>
 
@@ -197,5 +261,13 @@ onUnmounted(() => {
 @media (max-width: 820px) {
   .form-grid, .toolbar { grid-template-columns: 1fr; }
   .room-item { grid-template-columns: 1fr; align-items: start; }
+}
+
+.view-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
 }
 </style>

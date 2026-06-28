@@ -21,21 +21,28 @@ src/
 ├── api/
 │   └── axios.ts           axios-Instance, baseURL aus apiBaseUrl
 ├── router/
-│   └── index.ts           Hash-Routes (Dashboard, Tablet, Admin)
+│   └── index.ts           Hash-Routes (Dashboard, Tablet, Admin, Login)
 ├── stores/
 │   ├── dashboardDataStore.ts    Dashboard: REST + SSE /api/stream
 │   ├── roomTabletStore.ts       Raumtablet: REST + SSE /api/stream?room=X
-│   ├── adminDataStore.ts        Admin: CRUD via REST + Retry-Logik
-│   └── devDataStore.ts          Dev-Spielwiese (alle Endpoints)
+│   ├── adminDataStore.ts        Admin: CRUD via REST + SSE-Refresh
+│   └── authStore.ts             Sanctum-Token-Login + persistente Session
+├── composables/
+│   ├── useBranding.ts     Branding-Config (Logo, Primary-Color)
+│   └── useToast.ts        Toast-Stack-Composable
+├── components/
+│   ├── ChildPhoto.vue     Foto mit Fallback-Pfaden
+│   ├── ChildBadge.vue     Kompakte Kind-Darstellung
+│   ├── ConfirmDialog.vue  Modal mit danger/default Variante
+│   └── ToastStack.vue     Teleport-Renderer fuer Toasts
 ├── utils/
 │   └── api.ts             buildApiUrl() — erkennt /stream-Pfade
 ├── views/
 │   ├── DashboardView.vue
-│   ├── AdminView.vue
+│   ├── LoginView.vue
 │   ├── admin/             {Children,Rooms,Devices,Movement}AdminView.vue
 │   └── tablet/RoomTabletView.vue
-└── __tests__/
-    └── App.spec.ts        Vitest-Smoke-Test für App-Shell
+└── __tests__/             Vitest-Unit-Tests (Stores, Composables, Utils)
 ```
 
 ## ENV-Variablen
@@ -63,6 +70,7 @@ this.sse = new EventSource(buildApiUrl(qs ? `/stream?${qs}` : "/stream"));
 
 this.sse.addEventListener("child.moved", (e) => { … });
 this.sse.addEventListener("room.occupancy.updated", (e) => { … });
+this.sse.addEventListener("room.status.updated", (e) => { … });
 this.sse.addEventListener("room.alert.raised", (e) => { … });
 this.sse.addEventListener("stream.draining", () => {
   this.disconnectSSE();
@@ -113,7 +121,7 @@ npm run test:unit -- --watch  # Watch-Modus
 
 ## Was NICHT anfassen
 
-- Event-Namen in den SSE-Listenern (`child.moved`, `room.occupancy.updated`, `room.alert.raised`, `stream.draining`, `stream.ready`) — Strings sind Vertrag mit dem Backend.
-- `OccupancyUpdatePayload` / `RoomOccupancyUpdatePayload` Schemas — Server emittiert exakt diese Felder.
+- Event-Namen in den SSE-Listenern (`child.moved`, `room.occupancy.updated`, `room.status.updated`, `room.alert.raised`, `stream.draining`, `stream.ready`) — Strings sind Vertrag mit dem Backend.
+- `OccupancyUpdatePayload` / `RoomOccupancyUpdatePayload` Schemas inkl. `status.{over_capacity,within_tolerance}` — Server emittiert exakt diese Felder, die Tablet-Warn-/Ueberbelegt-Anzeige haengt daran.
 
 Siehe `../CLAUDE.md` für Architekturentscheidungen.

@@ -17,7 +17,8 @@ class ChildStoreRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:100'],
             'photo_url' => ['nullable', 'url', 'max:255'],
-            'tracker_uid' => ['required', 'string', 'max:100', 'unique:children,tracker_uid'],
+            // optional: Kinder werden oft VOR der RFID-Zuweisung angelegt.
+            'tracker_uid' => ['nullable', 'string', 'max:100', 'unique:children,tracker_uid'],
             'is_active' => ['boolean'],
         ];
     }

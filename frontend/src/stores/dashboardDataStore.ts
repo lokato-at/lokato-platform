@@ -34,6 +34,12 @@ export interface OccupancySnapshot {
 export interface OccupancyUpdatePayload extends OccupancySnapshot {
     room_id: number;
     room_name?: string;
+    capacity?: number | null;
+    tolerance?: number | null;
+    status?: {
+        over_capacity?: boolean;
+        within_tolerance?: boolean;
+    };
 }
 
 export interface Movement {
@@ -106,11 +112,8 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
         connectSSE() {
             if (this.sse) return;
 
-            // Bei einem manuell konstruierten Reconnect (nach stream.draining)
-            // setzt der Browser den Last-Event-ID-Header NICHT — der greift nur
-            // beim browser-internen Auto-Retry. Wir reichen die Cursor-Position
-            // deshalb explizit als Query-Param weiter; das Backend liest sie in
-            // SseStreamController::resolveStreamCursor.
+            // Last-Event-ID als Query-Param, weil der Browser den Header bei
+            // manuell konstruierten Reconnects (nach stream.draining) nicht setzt.
             const params = new URLSearchParams();
             if (this.lastEventId) params.set("last_event_id", this.lastEventId);
             const qs = params.toString();
@@ -183,7 +186,7 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
             }
             const idx = this.rooms.findIndex((r) => r.id === payload.id);
             if (idx >= 0) {
-                // Merge — behält children/current_count aus occupancy-Updates
+                // Merge erhaelt children/current_count aus den getrennten occupancy-Updates.
                 this.rooms[idx] = { ...this.rooms[idx], ...payload };
             } else {
                 this.rooms.push(payload);
@@ -194,8 +197,7 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
             this.error = null;
             try {
                 await api.patch(`/admin/rooms/${roomId}`, { is_active: isActive });
-                // State-Update kommt per SSE (room.status.updated) zurück —
-                // wir setzen hier nichts optimistisch, damit es keine Drift gibt.
+                // State-Update kommt per SSE zurueck, kein optimistic update (vermeidet Drift).
             } catch (err) {
                 this.error = err instanceof Error ? err.message : "Fehler beim Aktualisieren des Raums";
                 throw err;
@@ -216,6 +218,20 @@ export const useDashboardDataStore = defineStore("dashboardDataStore", {
                 if (room) {
                     room.current_count = payload.current_count ?? nextChildren.length;
                     room.children = nextChildren;
+                    // status/capacity/tolerance muessen mit, damit Warn-/Ueberbelegt-
+                    // Zaehler live aktualisieren.
+                    if (payload.status) {
+                        room.status = {
+                            over_capacity: payload.status.over_capacity ?? false,
+                            within_tolerance: payload.status.within_tolerance ?? false,
+                        };
+                    }
+                    if (typeof payload.capacity === "number") {
+                        room.capacity = payload.capacity;
+                    }
+                    if (typeof payload.tolerance === "number") {
+                        room.tolerance = payload.tolerance;
+                    }
                 }
             }
         },

@@ -1,10 +1,49 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import type { Child } from '@/stores/dashboardDataStore'
 
-defineProps<{
+const props = defineProps<{
   child: Child
   size?: 'sm' | 'md' | 'lg'
 }>()
+
+// Foto-Auswahl in dieser Reihenfolge:
+//   1) /branding/children/<child-id>.jpg          (Convention, manuell abgelegt)
+//   2) child.photo_url                            (falls in DB gesetzt)
+//   3) Initial-Placeholder
+//
+// Bei 404 auf #1 fällt das <img> automatisch auf die nächste Quelle.
+// Tipp im branding/README.md: legt die Bilder als z.B. "1.jpg", "2.jpg" ab —
+// die child.id ist die stabile ID, die im Admin-Bereich angezeigt wird.
+
+const candidates = computed<string[]>(() => {
+  const list: string[] = []
+  // 1) DB-photo_url (vom Admin via Upload gesetzt)
+  if (props.child.photo_url) {
+    list.push(props.child.photo_url)
+  }
+  // 2) Convention-Fallback: manuell abgelegte Datei
+  if (props.child.id != null) {
+    list.push(`/branding/children/${props.child.id}.jpg`)
+  }
+  return list
+})
+
+const currentIndex = ref(0)
+// Bei Kind-Wechsel (z.B. neue Position im List-Render) Index resetten.
+watch(
+  () => props.child.id,
+  () => {
+    currentIndex.value = 0
+  },
+)
+
+const currentSrc = computed(() => candidates.value[currentIndex.value] ?? null)
+
+function onError() {
+  // Nächste Quelle probieren. Wenn keine mehr da: out-of-range setzt currentSrc=null.
+  currentIndex.value += 1
+}
 
 function initial(name?: string): string {
   return (name ?? '?').trim().charAt(0).toUpperCase()
@@ -14,10 +53,11 @@ function initial(name?: string): string {
 <template>
   <span class="child-badge" :class="`size-${size ?? 'md'}`">
     <img
-      v-if="child.photo_url"
-      :src="child.photo_url"
+      v-if="currentSrc"
+      :src="currentSrc"
       :alt="`Foto von ${child.name}`"
       class="avatar"
+      @error="onError"
     />
     <span v-else class="avatar placeholder">{{ initial(child.name) }}</span>
     <span class="name">{{ child.name }}</span>

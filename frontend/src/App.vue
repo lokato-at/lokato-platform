@@ -71,6 +71,7 @@
 
     <hr v-if="!isTabletRoute" />
     <router-view />
+    <ToastStack />
   </div>
 </template>
 
@@ -79,6 +80,7 @@ import { computed, onMounted, ref, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/authStore";
 import { useBranding } from "@/composables/useBranding";
+import ToastStack from "@/components/ToastStack.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -96,6 +98,15 @@ watchEffect(() => {
   document.title = branding.value.facilityName
     ? `Lokato · ${branding.value.facilityName}`
     : "Lokato";
+});
+
+// Primary-Color als CSS-Custom-Property auf :root setzen. Alle Komponenten
+// die `var(--lokato-primary)` bzw. `var(--lokato-primary-text)` verwenden
+// (Nav-Buttons, Auth-Link, ConfirmDialog primary-button, …) reagieren live.
+watchEffect(() => {
+  const root = document.documentElement;
+  root.style.setProperty("--lokato-primary", branding.value.primaryColor);
+  root.style.setProperty("--lokato-primary-text", branding.value.primaryColorText);
 });
 
 onMounted(() => {
@@ -224,9 +235,9 @@ h3 {
   font-family: inherit;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #2A7CD9;
+  color: var(--lokato-primary, #2A7CD9);
   background: transparent;
-  border: 1px solid #2A7CD9;
+  border: 1px solid var(--lokato-primary, #2A7CD9);
   padding: 6px 14px;
   border-radius: 8px;
   text-decoration: none;
@@ -235,8 +246,8 @@ h3 {
 }
 
 .auth-link:hover {
-  background: #2A7CD9;
-  color: white;
+  background: var(--lokato-primary, #2A7CD9);
+  color: var(--lokato-primary-text, white);
 }
 
 .nav {
@@ -268,8 +279,8 @@ h3 {
 }
 
 .nav-item.active {
-  background: #2A7CD9;
-  color: white;
+  background: var(--lokato-primary, #2A7CD9);
+  color: var(--lokato-primary-text, white);
 }
 
 .nav-item:hover {

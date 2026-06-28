@@ -122,7 +122,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). For security issues, see
 
 - Student project at **FH OÖ, Campus Hagenberg** (winter semester 2025 / summer
   semester 2026)
-- Project supervision: **Wolfgang Hochleitner**
-- Maintainers: Edina Abazovic, Nikolai Hermann, Selina Catic, Tristan Trunez
+- Project supervision: **Wolfgang Hochleitner**, **Volker Christian**
+- Maintainers: Edina Abazovic, Selina Catic
 - Originally developed in partnership with a real-world after-school
   childcare facility; deployed and tested on-site

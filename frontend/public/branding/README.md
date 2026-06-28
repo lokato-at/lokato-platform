@@ -38,6 +38,7 @@ Aus `config.example.json` kopieren und anpassen:
 | `facilityShortName` | Kürzel für enge Layouts (Mobile, Tablet-Header). Optional. |
 | `tagline` | Untertitel-Slogan (z. B. „Interaktives Raumdisplay"). Optional. |
 | `primaryColor` | Akzentfarbe für aktive Nav-Buttons + Auth-Links (Hex). Default: Lokato-Blau `#2A7CD9`. |
+| `primaryColorText` | Textfarbe für Buttons mit `primaryColor`-Hintergrund. `"white"` oder `"black"` — manuell so wählen dass es zur primaryColor passt. Default `"white"`. |
 | `animations.files` | Array mit Dateinamen aus `animations/`, die als Welcome-Video getriggert werden. Leer = aus. |
 | `animations.cooldownSeconds` | Mindestabstand zwischen zwei Welcome-Animationen. Default 10. |
 | `animations.playWithSound` | Wenn `false`, Animationen laufen dauerhaft stumm. Default `true` (Ton ab erstem Tap). |
@@ -50,12 +51,20 @@ referenziert.
 
 ### `children/`
 
-Optional: Standard-Fotos pro Kind, falls du die Bilder nicht in der Datenbank
-(`children.photo_url`) hosten willst. Konvention:
+Optional: Fallback-Fotos pro Kind fuer den Fall, dass kein Foto per Admin-UI
+hochgeladen wurde.
 
-- Dateiname == Tracker-UID oder Kind-ID, z. B. `0x80691500004023FDD5C1FC7E.jpg`
-- Empfohlenes Format: `jpg` oder `webp`, quadratisch, mindestens 256×256 px
-- Referenz im Frontend: `/branding/children/<tracker-uid>.jpg`
+**Empfohlener Weg seit Foto-Upload:** Foto im Admin-Bereich pro Kind hochladen
+— es landet automatisch in `backend/storage/app/public/children/<id>.<ext>` und
+wird ueber nginx unter `/storage/children/...` ausgeliefert.
+
+**Auswahl-Reihenfolge im Frontend** (siehe `src/components/ChildPhoto.vue`):
+
+1. `child.photo_url` aus der DB (vom Admin-Upload gesetzt, `/storage/...`)
+2. `/branding/children/<id>.jpg` (manuell hier abgelegt, wenn 1 leer oder 404)
+3. Initial-Buchstabe als Platzhalter
+
+Du musst kein Foto setzen — fehlt eines, wird automatisch der Buchstabe gezeigt.
 
 ### `animations/`
 

@@ -101,14 +101,14 @@ Jeder Browser-Tab öffnet **eine SSE-Verbindung** zu `GET /api/stream`. Der Endp
 | `/api/stream` | Dashboard — alle Räume | `dashboardDataStore`, `adminDataStore` |
 | `/api/stream?room=X&initial=1` | Tablet — gescoped auf Raum X + initialer Snapshot | `roomTabletStore` |
 
-Der Stream sendet vier Event-Typen:
+Der Stream sendet folgende Event-Typen:
 
 | Event | Wann | Payload (Auszug) |
 |---|---|---|
 | `stream.ready` | Beim Connect | `{ scope, connected_at }` |
 | `child.moved` | Bei jedem neuen `MovementLog`-Eintrag | `{ id, child_id, child:{id,name}, from_room:{id,name}, to_room:{id,name}, source, occurred_at }` |
-| `room.occupancy.updated` | Bei Änderung der `child_locations` eines Raums | `{ room_id, room_name, current_count, children:[…] }` |
-| `room.status.updated` | Bei `RoomAdminController::update` (is_active / name / capacity / …) | `{ id, name, area, capacity, tolerance, is_active }` |
+| `room.occupancy.updated` | Bei Änderung der `child_locations` eines Raums oder Capacity-Change | `{ room_id, room_name, capacity, tolerance, current_count, children:[…], status:{ over_capacity, within_tolerance } }` |
+| `room.status.updated` | Bei `RoomAdminController::update`/`store`/`destroy` (is_active / name / capacity / …) | `{ id, name, area, capacity, tolerance, is_active }` |
 | `room.alert.raised` | Bei neuem `alerts`-Eintrag | `{ id, room_id, level, message, created_at, resolved_at }` |
 | `stream.draining` | Nach 60 s Connection-Alter | `{ reason, reconnect: true }` |
 
@@ -160,17 +160,25 @@ runStream():
 ### 3.2 Cache-Gate (warum die DB im Idle ruhig bleibt)
 
 Der teure Teil ist Punkt 3 (DB-Polls). Die werden **nur ausgeführt wenn der
-Cache-Wert sich verändert hat**. Der Cache wird in genau zwei Stellen
-gebumpt:
+Cache-Wert sich verändert hat**. Zwei getrennte Signale:
 
-| Bumper | Wann |
-|---|---|
-| `MqttSubscribeCommand` | Nach erfolgreichem `ingestScan()` |
-| `DeviceEventController::store` | Nach erfolgreichem `ingestScan()` |
-| `ChildrenController::checkout` | Nach erfolgreichem Checkout |
-| `RoomAdminController::update` | Nach erfolgreichem Room-Edit |
-| `RoomAdminController::destroy` | Nach erfolgreichem Room-Delete |
-| `DailyActiveResetCommand` | Nach nächtlichem Reset |
+- `bump()` setzt `sse:last_change_at` — der Loop pollt MovementLog/Alert/Room.
+- `bumpChildren()` setzt zusätzlich `sse:last_children_change_at` — triggert einen
+  Full-Refresh aller Occupancy-Snapshots (für Aenderungen ohne MovementLog).
+
+Bumper-Übersicht:
+
+| Bumper | Methode | Wann |
+|---|---|---|
+| `MqttSubscribeCommand` | `bump()` | Nach erfolgreichem `ingestScan()` |
+| `DeviceEventController::store` | `bump()` | Nach erfolgreichem `ingestScan()` |
+| `ChildrenController::checkout` | `bump()` | Nach erfolgreichem Checkout |
+| `ChildAdminController::update` | `bump()` | Update (is_active-Toggle schreibt MovementLog) |
+| `ChildAdminController::store`/`destroy`/`uploadPhoto`/`deletePhoto` | `bumpChildren()` | Metadaten-Aenderung ohne MovementLog |
+| `RoomAdminController::store` | `bumpChildren()` | Neuer Raum |
+| `RoomAdminController::update`/`destroy` | `bump()` | Room-Metadaten-Change |
+| `DeviceAdminController::store`/`update`/`destroy` | `bumpChildren()` | Device-CRUD |
+| `DailyActiveResetCommand` | `bumpChildren()` | Loescht ChildLocations ohne MovementLog |
 
 **Effekt**: Im Idle (alle Tabs offen, aber niemand scannt) bleibt jeder
 SSE-Loop bei `Cache::get('sse:last_change_at')` hängen — das ist ein
@@ -204,7 +212,8 @@ Alle Caches gehen über den **`database`-Driver** in eine Laravel-`cache`-Tabell
 
 | Key | Geschrieben von | Gelesen von | Lebensdauer |
 |---|---|---|---|
-| `sse:last_change_at` | `SseChangeSignal::bump()` | jeder SSE-Stream alle 500 ms | `Cache::forever` |
+| `sse:last_change_at` | `SseChangeSignal::bump()` / `bumpChildren()` | jeder SSE-Stream alle 500 ms | `Cache::forever` |
+| `sse:last_children_change_at` | `SseChangeSignal::bumpChildren()` | jeder SSE-Stream (Trigger fuer Full-Refresh) | `Cache::forever` |
 | Laravel-Session-Daten | `SESSION_DRIVER=database` | jeder Web-Request (für Sanctum bei Same-Origin) | 120 min |
 | Queue-Jobs | `QUEUE_CONNECTION=database` | – (aktuell nicht genutzt) | – |
 | Rate-Limiter | `throttle:N,1` middleware | Login + Scan endpoints | 1 min |

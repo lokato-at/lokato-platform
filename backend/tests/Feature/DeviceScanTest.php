@@ -81,7 +81,7 @@ class DeviceScanTest extends TestCase
         $this->assertNotNull($device->fresh()->last_seen);
     }
 
-    public function test_scan_returns_404_if_device_unknown(): void
+    public function test_scan_returns_ok_with_null_movement_if_device_unknown(): void
     {
         $child = Child::create([
             'name'        => 'Ben Beispiel',
@@ -96,10 +96,14 @@ class DeviceScanTest extends TestCase
             'event_time'  => now()->toIso8601String(),
         ]);
 
-        $response->assertStatus(404);
+        $response->assertStatus(200)
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('movement', null);
+
+        $this->assertSame(0, MovementLog::count(), 'unknown device must not write a movement');
     }
 
-    public function test_scan_returns_404_if_child_unknown(): void
+    public function test_scan_returns_ok_with_null_movement_if_child_unknown(): void
     {
         $room = Room::create([
             'name'      => 'Gruppenraum',
@@ -121,6 +125,49 @@ class DeviceScanTest extends TestCase
             'event_time'  => now()->toIso8601String(),
         ]);
 
-        $response->assertStatus(404);
+        $response->assertStatus(200)
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('movement', null);
+
+        $this->assertSame(0, MovementLog::count(), 'unknown child must not write a movement');
+    }
+
+    public function test_same_room_scan_is_ignored(): void
+    {
+        $room = Room::create([
+            'name'      => 'Obergeschoss',
+            'area'      => 'OG',
+            'capacity'  => 15,
+            'tolerance' => 2,
+            'is_active' => true,
+        ]);
+        $device = Device::create([
+            'name'       => 'Scanner OG',
+            'device_key' => 'raspberry_og',
+            'room_id'    => $room->id,
+        ]);
+        $child = Child::create([
+            'name'        => 'Kind im OG',
+            'tracker_uid' => 'TAG-OG',
+            'is_active'   => true,
+        ]);
+        ChildLocation::create([
+            'child_id'   => $child->id,
+            'room_id'    => $room->id,
+            'updated_at' => now()->subMinute(),
+        ]);
+
+        $response = $this->postJson('/api/v1/scan', [
+            'device_key'  => $device->device_key,
+            'tracker_uid' => $child->tracker_uid,
+            'event_time'  => now()->toIso8601String(),
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('movement', null);
+
+        $this->assertSame(0, MovementLog::count(), 'same-room scan must not write a movement');
+        $this->assertNotNull($device->fresh()->last_seen, 'last_seen must still be updated for telemetry');
     }
 }

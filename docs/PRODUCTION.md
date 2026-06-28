@@ -66,6 +66,49 @@ Erwartete Ausgaben:
 - `/api/health` → `{"status":"ok",...}`
 - `journalctl` → mind. `Subscribed. Waiting for messages on topic: /api/v1/scan`
 
+## Admin-User für Erststart
+
+`start-prod-raspi.sh` seedet **bewusst nicht** — Prod darf keine Default-Credentials anlegen. Nach dem ersten Setup muss der Admin-User manuell erzeugt werden, sonst sind `/api/v1/admin/*` und damit der Admin-Bereich im Frontend nicht erreichbar.
+
+### Variante A: Tinker (einmalig, beliebige Credentials)
+
+```bash
+sudo -u www-data php /var/www/lokato/backend/artisan tinker --execute \
+  "App\\Models\\User::create(['name' => 'Admin', 'email' => 'admin@hort.local', 'password' => bcrypt('DEIN_PASSWORT')]);"
+```
+
+### Variante B: AdminUserSeeder mit Env-Vars (idempotent)
+
+Der `AdminUserSeeder` liest `ADMIN_USER_EMAIL` und `ADMIN_USER_PASSWORD` aus dem Environment und macht `updateOrCreate` auf der E-Mail — d.h. mehrfaches Ausführen ist sicher (User bleibt, Passwort wird auf das aktuelle env-Var gesetzt).
+
+```bash
+ADMIN_USER_EMAIL=admin@hort.local \
+ADMIN_USER_PASSWORD=DEIN_PASSWORT \
+  sudo -E -u www-data php /var/www/lokato/backend/artisan db:seed \
+  --class=AdminUserSeeder --force
+```
+
+Das `-E` an `sudo` ist wichtig — sonst werden die Env-Vars beim User-Switch verworfen und der Seeder generiert ein Random-Passwort (das er ins stdout schreibt — auch ein gangbarer Weg, wenn du es einmalig brauchst).
+
+### Verifikation
+
+```bash
+curl -s http://localhost/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@hort.local","password":"DEIN_PASSWORT"}' | head
+```
+
+Erwartet: JSON-Response mit `token` und `user`-Block.
+
+### Passwort später ändern
+
+```bash
+sudo -u www-data php /var/www/lokato/backend/artisan tinker --execute \
+  "\$u = App\\Models\\User::where('email','admin@hort.local')->first(); \$u->password = bcrypt('NEUES_PASSWORT'); \$u->save();"
+```
+
+Oder einfach Variante B mit anderen Env-Vars erneut ausführen.
+
 ## Pi-Befehls-Cheat-Sheet
 
 | Was | Befehl |

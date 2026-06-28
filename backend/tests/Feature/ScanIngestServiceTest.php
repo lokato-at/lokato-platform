@@ -62,21 +62,34 @@ class ScanIngestServiceTest extends TestCase
 
     public function test_older_scan_does_not_move_child_backwards(): void
     {
-        ['room' => $room, 'device' => $device, 'child' => $child] = $this->makeFixtures();
+        ['room' => $gartenRoom, 'child' => $child] = $this->makeFixtures();
         $service = app(ScanIngestService::class);
 
-        // Aktuelle Location: Garten, vor 5 Minuten gesetzt
+        // Zweiter Raum/Scanner, sonst greift der Same-Room-Skip statt der
+        // Idempotenz-Logik, die hier getestet werden soll.
+        $obergeschoss = Room::create([
+            'name' => 'Obergeschoss', 'area' => 'OG',
+            'capacity' => 15, 'tolerance' => 2, 'is_active' => true,
+        ]);
+        $deviceOg = Device::create([
+            'name' => 'Scanner OG',
+            'device_key' => 'raspberry_og',
+            'room_id' => $obergeschoss->id,
+        ]);
+
+        // Aktuelle Location: Garten, jetzt gesetzt
         $currentTime = Carbon::now();
         ChildLocation::create([
             'child_id' => $child->id,
-            'room_id' => $room->id,
+            'room_id' => $gartenRoom->id,
             'updated_at' => $currentTime,
         ]);
 
-        // Älterer Scan kommt verspätet rein — soll NICHT die Location verändern
+        // Älterer Scan ins Obergeschoss kommt verspätet rein — soll NICHT die
+        // (neuere) Garten-Location überschreiben.
         $olderEventTime = $currentTime->copy()->subMinutes(10)->toIso8601String();
         $movement = $service->ingestScan(
-            deviceKey: $device->device_key,
+            deviceKey: $deviceOg->device_key,
             trackerUid: $child->tracker_uid,
             eventTimeIso: $olderEventTime,
             source: 'mqtt_scanner',
@@ -85,10 +98,43 @@ class ScanIngestServiceTest extends TestCase
         // Movement wird trotzdem geloggt (Append-Only-Historie), aber Location bleibt
         $this->assertNotNull($movement);
         $location = ChildLocation::where('child_id', $child->id)->first();
+        $this->assertSame($gartenRoom->id, $location->room_id, 'location must not flip to the older-scan room');
         $this->assertTrue(
             $currentTime->equalTo($location->updated_at) || $currentTime->greaterThan($location->updated_at),
             'older scan must not overwrite a newer current location'
         );
+    }
+
+    public function test_same_room_scan_returns_null_and_writes_no_movement(): void
+    {
+        ['room' => $room, 'device' => $device, 'child' => $child] = $this->makeFixtures();
+        $service = app(ScanIngestService::class);
+
+        // Kind ist bereits im Garten
+        ChildLocation::create([
+            'child_id' => $child->id,
+            'room_id' => $room->id,
+            'updated_at' => Carbon::now()->subMinute(),
+        ]);
+
+        $result = $service->ingestScan(
+            deviceKey: $device->device_key,
+            trackerUid: $child->tracker_uid,
+            eventTimeIso: now()->toIso8601String(),
+            source: 'mqtt_scanner',
+        );
+
+        $this->assertNull($result, 'same-room scan must return null');
+        $this->assertSame(0, MovementLog::count(), 'no MovementLog row must be created');
+
+        // Location bleibt unverändert
+        $this->assertDatabaseHas('child_locations', [
+            'child_id' => $child->id,
+            'room_id' => $room->id,
+        ]);
+
+        // Device.last_seen wird trotzdem aktualisiert (Telemetrie)
+        $this->assertNotNull($device->fresh()->last_seen);
     }
 
     public function test_unknown_device_returns_null(): void

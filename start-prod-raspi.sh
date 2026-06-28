@@ -17,6 +17,12 @@
 #   INSTALL_DEPS=0               apt-Block ueberspringen (bei wiederholtem Run)
 #   CONFIG_NETWORK=0             IP-Konfiguration ueberspringen
 #   DB_PASSWORD=changeme         Passwort fuer den Laravel-DB-User
+#   ALERT_EMAIL=you@example.com  Mail-Empfaenger fuer Log-Audit-Cron-Anomalien
+#   ADMIN_USER_EMAIL=…           Vom AdminUserSeeder gelesen, FALLS du das
+#   ADMIN_USER_PASSWORD=…        Seeder spaeter manuell ausfuehrst
+#                                (`artisan db:seed --class=AdminUserSeeder`).
+#                                Dieses Script seedet bewusst NICHT — siehe
+#                                docs/PRODUCTION.md "Admin-User fuer Erststart".
 # =============================================================================
 
 set -Eeuo pipefail
@@ -302,6 +308,7 @@ deploy_backend() {
         "$BACKEND_DEPLOY/storage/framework/cache" \
         "$BACKEND_DEPLOY/storage/framework/sessions" \
         "$BACKEND_DEPLOY/storage/framework/views" \
+        "$BACKEND_DEPLOY/storage/app/public/children" \
         "$BACKEND_DEPLOY/bootstrap/cache"
 
     # .env aus Pi-Template, wenn noch keine da ist.
@@ -333,6 +340,13 @@ deploy_backend() {
     as_www_data php "$BACKEND_DEPLOY/artisan" config:cache
     as_www_data php "$BACKEND_DEPLOY/artisan" route:cache
     as_www_data php "$BACKEND_DEPLOY/artisan" view:cache
+
+    # storage:link einrichten — public/storage → storage/app/public. Damit
+    # nginx unter /storage/children/<id>.jpg die hochgeladenen Foto-Dateien
+    # findet (siehe nginx prod.conf, location /storage/).
+    if [[ ! -L "$BACKEND_DEPLOY/public/storage" ]]; then
+        as_www_data php "$BACKEND_DEPLOY/artisan" storage:link
+    fi
     ok "Backend deployt."
 }
 
@@ -472,7 +486,18 @@ print_summary() {
    1) DB-Passwort in $BACKEND_DEPLOY/.env aendern (aktuell: $DB_PASSWORD)
       und MariaDB-User-Passwort entsprechend mit ALTER USER neu setzen.
    2) APP_URL in $BACKEND_DEPLOY/.env auf "http://$actual_ip" pruefen.
-   3) Reboot zum Test, dass alles automatisch hochkommt.
+   3) Admin-User anlegen (sonst ist /admin nicht erreichbar). Zwei Wege:
+
+      a) Tinker (einmaliger Befehl, beliebige Credentials):
+         sudo -u www-data php $BACKEND_DEPLOY/artisan tinker --execute \\
+           "App\\\\Models\\\\User::create(['name' => 'Admin', 'email' => 'admin@hort.local', 'password' => bcrypt('DEIN_PASSWORT')]);"
+
+      b) Seeder mit Env-Vars (idempotent — updateOrCreate per E-Mail):
+         ADMIN_USER_EMAIL=admin@hort.local ADMIN_USER_PASSWORD=DEIN_PASSWORT \\
+           sudo -E -u www-data php $BACKEND_DEPLOY/artisan db:seed \\
+           --class=AdminUserSeeder --force
+
+   4) Reboot zum Test, dass alles automatisch hochkommt.
 
 ==============================================================================
 

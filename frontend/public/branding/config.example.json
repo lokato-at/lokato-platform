@@ -3,6 +3,7 @@
   "facilityShortName": "",
   "tagline": "",
   "primaryColor": "#2A7CD9",
+  "primaryColorText": "white",
   "animations": {
     "files": [],
     "cooldownSeconds": 10,

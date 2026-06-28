@@ -38,20 +38,27 @@ app/
 
 ## Routen-Übersicht (`routes/api.php`)
 
+Public (kein Auth):
+
 | Methode | Pfad | Controller |
 |---|---|---|
 | POST | `/api/v1/scan` | `DeviceEventController@store` |
-| GET | `/api/v1/children` | `ChildrenController@index` |
-| GET | `/api/v1/children/{child}` | `ChildrenController@show` |
+| GET | `/api/v1/children`, `/children/{child}` | `ChildrenController@index`/`show` |
+| GET | `/api/v1/movement-log`, `/children/{child}/movement-log` | `MovementLogController` |
+| GET | `/api/v1/rooms`, `/rooms/{room}/occupancy` | `RoomsController` |
+| POST | `/api/v1/auth/login` | `AuthController@login` (throttle 10/min) |
+| GET | `/api/stream[?room=X&initial=1&last_event_id=…]` | `SseStreamController@stream` |
+| GET | `/api/health`, `/api/readiness`, `/api/diagnostics` | `DiagnosticsController` |
+
+Auth-protected (`auth:sanctum`):
+
+| Methode | Pfad | Controller |
+|---|---|---|
 | POST | `/api/v1/children/{child}/checkout` | `ChildrenController@checkout` |
-| GET | `/api/v1/movement-log` | `MovementLogController@index` |
-| GET | `/api/v1/children/{child}/movement-log` | `MovementLogController@byChild` |
-| GET | `/api/v1/rooms` | `RoomsController@index` |
-| GET | `/api/v1/rooms/{room}/occupancy` | `RoomsController@occupancy` |
+| POST | `/api/v1/auth/logout`, GET `/auth/me` | `AuthController` |
 | GET | `/api/v1/admin/summary` | `Admin\AdminSummaryController` |
 | GET/POST/PUT/DELETE | `/api/v1/admin/{children,rooms,devices}` | `Admin\…AdminController` (apiResource) |
-| GET | `/api/stream[?room=X&initial=1&last_event_id=…]` | `SseStreamController@stream` |
-| GET | `/api/health` / `/api/readiness` / `/api/diagnostics` | `DiagnosticsController` |
+| POST/DELETE | `/api/v1/admin/children/{child}/photo` | `Admin\ChildAdminController@uploadPhoto`/`deletePhoto` |
 
 ## SSE-Endpoint (Phase-2-Refactor)
 
@@ -68,9 +75,19 @@ Loop-Verhalten:
 - Heartbeat-Kommentar (`: heartbeat …`) alle 15 s, damit Proxies die Verbindung nicht killen.
 - Auto-Drain via `stream.draining`-Event nach `SSE_MAX_CONNECTION_SECONDS` (default 60). Client soll danach reconnecten.
 
-Cache-Bump-Aufrufer (genau zwei Stellen — `ScanIngestService` bleibt unangetastet):
-- `MqttSubscribeCommand:236` nach erfolgreichem `ingestScan()`
-- `DeviceEventController:43` nach erfolgreichem `ingestScan()`
+Cache-Bump-Aufrufer (`ScanIngestService` selbst bleibt unangetastet):
+
+- `bump()` — Movement-getriebene Aenderungen (SSE-Loop pollt MovementLog/Alert/Room):
+  - `MqttSubscribeCommand` nach erfolgreichem `ingestScan()`
+  - `DeviceEventController` nach erfolgreichem `ingestScan()`
+  - `ChildrenController::checkout()` nach Checkout
+  - `ChildAdminController::update()` (schreibt bei is_active-Toggle MovementLog)
+  - `RoomAdminController::update()`/`destroy()` (Room-Metadaten-Change)
+- `bumpChildren()` — Aenderungen ohne MovementLog (triggert Full-Refresh aller Raum-Snapshots):
+  - `RoomAdminController::store()` (neuer Raum)
+  - `ChildAdminController::store()`/`destroy()`/`uploadPhoto()`/`deletePhoto()`
+  - `DeviceAdminController::store()`/`update()`/`destroy()`
+  - `DailyActiveResetCommand` (loescht ChildLocations, schreibt keine MovementLogs)
 
 ## Logging
 

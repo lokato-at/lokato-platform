@@ -175,12 +175,12 @@ watch(visible, (isOpen) => {
 }
 
 .btn-primary {
-  background: #2A7CD9;
-  color: white;
+  background: var(--lokato-primary, #2A7CD9);
+  color: var(--lokato-primary-text, white);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  filter: brightness(0.92);
 }
 
 .btn-danger {

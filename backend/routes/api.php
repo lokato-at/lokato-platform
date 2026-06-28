@@ -55,6 +55,8 @@ Route::prefix('v1')->group(function () {
 
         // /api/v1/admin/children
         Route::apiResource('children', ChildAdminController::class);
+        Route::post('children/{child}/photo', [ChildAdminController::class, 'uploadPhoto']);
+        Route::delete('children/{child}/photo', [ChildAdminController::class, 'deletePhoto']);
 
         // /api/v1/admin/rooms
         Route::apiResource('rooms', RoomAdminController::class);

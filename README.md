@@ -48,9 +48,6 @@ Detail-Anleitungen pro Use-Case:
 | **[`frontend/README.md`](frontend/README.md)** | Frontend-Code-Layout, Stores, SSE-Pattern, npm-Scripts |
 | **[`frontend/frontend_explanation.md`](frontend/frontend_explanation.md)** | Frontend-Architektur (ausführlich) |
 | **[`tools/log_audit/README.md`](tools/log_audit/README.md)** | Log-Audit-Tool im Detail |
-| **[`CLAUDE.md`](CLAUDE.md)** | Architekturentscheidungen + „nicht anfassen"-Bereiche + `.env`-Quirks |
-| **[`BETREUUNG.md`](BETREUUNG.md)** | Briefing für die Betreuung — Was wurde gemacht und warum |
-| **[`VERBESSERUNGSVORSCHLAEGE.md`](VERBESSERUNGSVORSCHLAEGE.md)** | Strukturierte Verbesserungs-Analyse |
 | **[`PRODUCTION_TESTING.md`](PRODUCTION_TESTING.md)** | Pi-Test-Checkliste (vorbestehend, weiter gültig) |
 
 ---
@@ -108,7 +105,6 @@ tools/log_audit/              Python-Audit-Tool
 docs/                         Detail-Dokumentation
 start-prod-raspi.sh           Pi-Komplett-Setup
 stop-prod-raspi.sh            Pi-Dienste stoppen
-start-dev.ps1                 Win-Dev Komfort-Wrapper (Legacy Host-Mode)
 ```
 
 ---
@@ -124,13 +120,3 @@ start-dev.ps1                 Win-Dev Komfort-Wrapper (Legacy Host-Mode)
 /etc/php/X.Y/fpm/pool.d/lokato.conf  Pi-php-fpm-Pool
 /etc/systemd/system/lokato-mqtt.service
 ```
-
----
-
-## Was NICHT angefasst werden soll
-
-- `backend/app/Services/ScanIngestService.php` — zentrale Scan-Verarbeitungslogik. Änderungen nur außerhalb von Phase 2/3 mit explizitem Auftrag.
-- Fachliche Geschäftsregeln in `MovementLog`, `ChildLocation`, `Alert`-Modellen.
-- Validierungs-Code in `MqttSubscribeCommand` (das einzig erlaubte Add: `SseChangeSignal::bump()`-Aufruf nach erfolgreichem Ingest).
-
-Siehe `CLAUDE.md` für die vollständige Architekturentscheidungs-Übersicht.

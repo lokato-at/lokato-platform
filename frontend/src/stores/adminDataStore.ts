@@ -6,9 +6,7 @@ import { buildApiUrl } from "@/utils/api";
 const ADMIN_REQUEST_TIMEOUT_MS = 30000;
 const ADMIN_TIMEOUT_RETRY_ATTEMPTS = 2;
 const ADMIN_TIMEOUT_RETRY_DELAY_MS = 1500;
-// Mindestabstand zwischen zwei silent-Refreshes — sonst löst jeder einzelne
-// Scan-Event eine volle Liste-Reload aus, was bei vielen Scans hintereinander
-// die DB unnötig hämmert.
+// Throttle gegen Scan-Bursts: sonst loest jeder Scan einen vollen List-Reload aus.
 const ADMIN_SSE_REFRESH_THROTTLE_MS = 1000;
 
 export interface AdminRoom {
@@ -67,9 +65,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     loading: false,
     error: null as string | null,
 
-    // SSE-Anbindung für Admin-Views: Wenn auf Dashboard/Tablet woanders
-    // is_active toggled wird oder ein Scan ein Kind aktiviert, sollen die
-    // Admin-Listen sich ohne F5 aktualisieren.
     sse: null as EventSource | null,
     sseConnected: false,
     sseLastEventId: null as string | null,
@@ -167,7 +162,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       photo_url: string | null;
       tracker_uid: string | null;
       is_active: boolean;
-    }) {
+    }): Promise<AdminChild | null> {
       try {
         const clean = {
           name: payload.name,
@@ -176,10 +171,36 @@ export const useAdminDataStore = defineStore("adminDataStore", {
           is_active: payload.is_active ?? true,
         };
 
-        await api.post("/admin/children", clean);
+        const res = await api.post<AdminChild>("/admin/children", clean);
         await this.loadChildren();
+        return res.data;
       } catch (err) {
         this.setError("Fehler beim Erstellen eines Kindes", err);
+        return null;
+      }
+    },
+
+    async uploadChildPhoto(childId: number, file: File) {
+      try {
+        const formData = new FormData();
+        formData.append("photo", file);
+        await api.post(`/admin/children/${childId}/photo`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        await this.loadChildren();
+      } catch (err) {
+        this.setError("Fehler beim Hochladen des Fotos", err);
+        throw err;
+      }
+    },
+
+    async deleteChildPhoto(childId: number) {
+      try {
+        await api.delete(`/admin/children/${childId}/photo`);
+        await this.loadChildren();
+      } catch (err) {
+        this.setError("Fehler beim Entfernen des Fotos", err);
+        throw err;
       }
     },
 
@@ -298,8 +319,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
       }
     },
 
-    // ----- SSE-Sync für Admin-Views -----
-
     connectSSE() {
       if (this.sse) return;
 
@@ -312,8 +331,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         this.sseConnected = true;
       };
 
-      // child.moved kann is_active von false→true wechseln (erster Scan).
-      // Wir refreshen die Children-Liste mit Throttle gegen Scan-Bursts.
+      // child.moved kann is_active von false→true flippen (erster Scan).
       this.sse.addEventListener("child.moved", (e: MessageEvent) => {
         this.sseLastEventId = e.lastEventId || this.sseLastEventId;
         const now = Date.now();
@@ -322,7 +340,6 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         void this.loadChildren();
       });
 
-      // room.status.updated bringt is_active, name, capacity, ... direkt mit.
       this.sse.addEventListener("room.status.updated", (e: MessageEvent) => {
         this.sseLastEventId = e.lastEventId || this.sseLastEventId;
         const now = Date.now();

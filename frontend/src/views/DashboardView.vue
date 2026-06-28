@@ -255,7 +255,13 @@ function onCancelAction() {
 }
 
 onMounted(async () => {
-  await store.fetchAllDashboardData()
+  // force=true: bei jedem Re-Mount frische Daten laden. Der Store hat einen
+  // Skip-Pattern ("wenn rooms + movements schon da, return") — das spart Calls
+  // beim Initial-Load, ABER führt zu Stale-Data wenn man zwischen Views
+  // navigiert (Dashboard → Admin → Dashboard) und währenddessen Änderungen
+  // passieren, die der SSE-Loop nicht erfasst (z.B. Kind im Admin geändert
+  // während Dashboard nicht offen war).
+  await store.fetchAllDashboardData(true)
   store.connectSSE()
 })
 
@@ -307,11 +313,12 @@ onUnmounted(() => {
           <p class="metric-label">Anwesende Kinder</p>
           <p class="metric-value">{{ metrics.presentChildren }}</p>
         </article>
-        <article class="metric-card">
+        <article class="metric-card" :class="{ 'metric-warning': metrics.warningRooms > 0 }">
           <p class="metric-label">Warnungen</p>
           <p class="metric-value">{{ metrics.warningRooms }}</p>
         </article>
-        <article class="metric-card">
+
+        <article class="metric-card" :class="{ 'metric-over': metrics.overCapacity > 0 }">
           <p class="metric-label">Überbelegt</p>
           <p class="metric-value">{{ metrics.overCapacity }}</p>
         </article>
@@ -365,7 +372,7 @@ onUnmounted(() => {
 
         <ul v-if="selectedRoomChildren.length" class="modal-child-list">
           <li v-for="child in selectedRoomChildren" :key="child.id" class="modal-child-item">
-            <ChildBadge :child="child" size="md" class="child-badge-spacing"/>
+            <ChildBadge :child="child" size="md" class="child-badge-spacing" />
             <button v-if="auth.isAuthenticated" class="remove-child" type="button"
               :disabled="checkoutInProgress.has(child.id)" :aria-label="`${child.name} austragen`"
               @click.stop="requestCheckout(child, selectedRoomCard.room.id)">
@@ -399,17 +406,71 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.metric-card {
+  width: 100%;
+  min-height: 145px;
+  border: 1px solid #e6edf3;
+  border-radius: 18px;
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.metric-warning {
+  background: linear-gradient(135deg, #fff7c2, #fde68a);
+  border-color: #facc15;
+}
+
+.metric-over {
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+  border-color: #ef4444;
+}
+
+.metric-warning .metric-label,
+.metric-warning .metric-value {
+  color: #854d0e;
+}
+
+.metric-over .metric-label,
+.metric-over .metric-value {
+  color: #991b1b;
+}
+
+.metric-warning .metric-value::before {
+  content: '';
+}
+
+.metric-over .metric-value::before {
+  content: '';
+}
+
 .child-badge-spacing {
   margin-right: 0.5rem;
 }
 
 .status-entered {
-  color: #2563eb; /* blau */
+  color: #2563eb;
+  /* blau */
   font-weight: 600;
 }
 
 .status-logged-out {
-  color: #dc2626; /* rot */
+  color: #dc2626;
+  /* rot */
   font-weight: 600;
 }
 

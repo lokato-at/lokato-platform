@@ -11,6 +11,9 @@ export interface BrandingConfig {
   facilityShortName: string
   tagline: string
   primaryColor: string
+  /** Textfarbe für Elemente, die `primaryColor` als Hintergrund haben.
+   *  Du wählst manuell, was zu deinem Branding passt: "white" oder "black". */
+  primaryColorText: string
   animations: BrandingAnimations
 }
 
@@ -19,6 +22,7 @@ const DEFAULT_BRANDING: BrandingConfig = {
   facilityShortName: '',
   tagline: '',
   primaryColor: '#2A7CD9',
+  primaryColorText: 'white',
   animations: {
     files: [],
     cooldownSeconds: 10,

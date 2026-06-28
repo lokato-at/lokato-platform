@@ -28,7 +28,7 @@ opening a public issue.
    # Backend
    docker compose exec php-fpm php artisan test
    # Frontend
-   cd frontend && npm run test
+   cd frontend && npm run test:unit
    ```
 4. If you touch infrastructure (`docker-compose.yml`, `start-prod-raspi.sh`,
    nginx configs, php-fpm pool): explain why in the PR description, ideally
@@ -57,9 +57,9 @@ If you want to do any of the above, please open an issue first to discuss.
 
 ## Code style
 
-- **PHP**: PSR-12, run `composer run-script test` before pushing
+- **PHP**: PSR-12, run `composer test` before pushing (clears config + runs `artisan test`)
 - **Vue / TypeScript**: ESLint + Prettier configured in the repo, run
-  `npm run lint && npm run format:check`
+  `npm run lint && npm run format`
 - **Arduino / ESP32** (in `lokato-main`): match the existing style in
   `esp32_rfid_mqtt_prod/`
 

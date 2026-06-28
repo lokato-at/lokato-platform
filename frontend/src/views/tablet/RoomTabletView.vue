@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRoomTabletStore } from "@/stores/roomTabletStore";
 import { useBranding } from "@/composables/useBranding";
+import ChildPhoto from "@/components/ChildPhoto.vue";
 
 const store = useRoomTabletStore();
 const route = useRoute();
@@ -29,6 +30,19 @@ const capacityLabel = computed(() => {
   return typeof capacity === "number" ? String(capacity) : "-";
 });
 
+const occupancyStatus = computed<'ok' | 'warn' | 'over'>(() => {
+  const status = room.value?.status;
+  if (status?.over_capacity) return 'over';
+  if (status?.within_tolerance) return 'warn';
+  return 'ok';
+});
+
+const occupancyStatusLabel = computed(() => {
+  if (occupancyStatus.value === 'over') return 'Überbelegt';
+  if (occupancyStatus.value === 'warn') return 'Warnung';
+  return null;
+});
+
 function childInitials(name?: string) {
   if (!name) return "?";
   return name.trim().charAt(0).toUpperCase();
@@ -44,24 +58,15 @@ async function loadRoom(nextRoomId: number | null) {
   store.connectSSE(nextRoomId);
 }
 
-// ---------------------------------------------------------------------------
-// Animation auf neue Ankunft
-// ---------------------------------------------------------------------------
-// Strategie: Wir vergleichen die Kinder-IDs vor und nach jedem Update.
-// Neue ID dazugekommen → ein Kind wurde gerade gescannt → Animation.
-// Cooldown verhindert, dass bei mehreren gleichzeitigen Scans
-// (kommt vor, wenn mehrere Kinder hintereinander durch die Tür gehen)
-// die Animation mehrfach durchstartet.
-
+// Welcome-Animation wenn eine neue Kind-ID in der children-Liste auftaucht.
+// Cooldown verhindert Mehrfach-Trigger bei Bursts (mehrere Kinder gleichzeitig).
 const knownChildIds = ref<Set<number>>(new Set());
 const isFirstSnapshot = ref(true);
 const currentAnimation = ref<string | null>(null);
 const lastTriggerAt = ref(0);
 const soundUnlocked = ref(false);
 
-// Browser-Autoplay-Policy: Video mit Ton darf erst nach erster User-Geste
-// abgespielt werden. Wir hören EINMAL auf den ersten Klick/Touch im
-// Tablet-View — danach sind alle weiteren Videos mit Ton möglich.
+// Browser-Autoplay-Policy: Ton braucht erste User-Geste.
 function unlockSound() {
   soundUnlocked.value = true;
 }
@@ -81,22 +86,21 @@ onUnmounted(() => {
 watch(roomId, (next, prev) => {
   if (next === prev) return;
   store.disconnectSSE();
-  // Bei Raumwechsel: alles zurücksetzen, sonst werden bestehende Kinder
-  // im neuen Raum fälschlich als "Ankunft" gewertet.
+  // Reset bei Raumwechsel, sonst werden bestehende Kinder im neuen Raum als
+  // "Ankunft" gewertet.
   knownChildIds.value = new Set();
   isFirstSnapshot.value = true;
   currentAnimation.value = null;
   void loadRoom(next);
 });
 
-// Hauptdetektor: ID-Diff über die children-Liste.
 watch(
   () => children.value.map((c) => c.id),
   (nextIds) => {
     const nextSet = new Set(nextIds);
 
     if (isFirstSnapshot.value) {
-      // Erstes Update nach Mount / Raumwechsel: nur Baseline setzen, KEIN Trigger.
+      // Initial-Snapshot: nur Baseline setzen, keine Animation.
       knownChildIds.value = nextSet;
       isFirstSnapshot.value = false;
       return;
@@ -112,15 +116,11 @@ watch(
 );
 
 function tryTriggerAnimation() {
-  // Inaktive Räume zeigen das "Raum geschlossen"-Banner — eine Welcome-
-  // Animation wäre da widersprüchlich. Theoretisch sollte ein Scan in einen
-  // inaktiven Raum nicht passieren (Raum gibt's, Device ist drin), aber wenn
-  // doch: kein Trigger.
   if (room.value?.is_active === false) return;
 
   const files = branding.value.animations.files;
   if (files.length === 0) return;
-  if (currentAnimation.value) return; // läuft schon → ignorieren
+  if (currentAnimation.value) return;
 
   const cooldownMs = (branding.value.animations.cooldownSeconds || 10) * 1000;
   if (Date.now() - lastTriggerAt.value < cooldownMs) return;
@@ -130,8 +130,8 @@ function tryTriggerAnimation() {
   lastTriggerAt.value = Date.now();
 }
 
-// Wenn der Raum mitten in einer laufenden Animation deaktiviert wird:
-// Animation sofort abbrechen, sonst spielt sie über dem "geschlossen"-Banner.
+// Raum-Deaktivierung waehrend laufender Animation: sofort abbrechen, sonst
+// spielt sie ueber dem "geschlossen"-Banner.
 watch(
   () => room.value?.is_active,
   (isActive) => {
@@ -168,8 +168,17 @@ function dismissAnimation() {
         <p class="meta">Aktuelle Belegung</p>
       </div>
       <div class="status">
-        <span class="count">{{ currentCount }}</span>
-        <span class="capacity">/ {{ capacityLabel }}</span>
+        <div class="count-line" :class="occupancyStatus">
+          <span class="count">{{ currentCount }}</span>
+          <span class="capacity">/ {{ capacityLabel }}</span>
+        </div>
+        <span
+          v-if="occupancyStatusLabel"
+          class="status-pill"
+          :class="occupancyStatus"
+        >
+          {{ occupancyStatusLabel }}
+        </span>
         <span class="connection" :class="{ online: store.sseConnected }">
           {{ connectionLabel }}
         </span>
@@ -190,13 +199,7 @@ function dismissAnimation() {
 
       <ul v-else class="child-grid">
         <li v-for="child in children" :key="child.id" class="child-card">
-          <img
-            v-if="child.photo_url"
-            :src="child.photo_url"
-            :alt="`Photo of ${child.name}`"
-            class="avatar"
-          />
-          <span v-else class="avatar placeholder">{{ childInitials(child.name) }}</span>
+          <ChildPhoto :child="child" />
           <span class="name">{{ child.name }}</span>
         </li>
       </ul>
@@ -263,6 +266,15 @@ function dismissAnimation() {
   text-align: right;
 }
 
+.count-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  transition: color 0.2s;
+}
+.count-line.warn  { color: #d97706; }
+.count-line.over  { color: #dc2626; }
+
 .count {
   font-size: 3rem;
   font-weight: 700;
@@ -273,6 +285,23 @@ function dismissAnimation() {
   font-size: 1.2rem;
   color: #64748b;
 }
+
+.count-line.warn .capacity,
+.count-line.over .capacity {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.status-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.status-pill.warn { background: #fef3c7; color: #92400e; }
+.status-pill.over { background: #fee2e2; color: #991b1b; }
 
 .connection {
   padding: 6px 12px;

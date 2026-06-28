@@ -39,7 +39,7 @@ function roomFillStyle(room: Room) {
   if (!fill) return;
   const percentage = capacity > 0 ? Math.min((currentCount.value / capacity) * 100, 100) : 0;
   fill.style.width = `${percentage}%`;
-  
+
 
 } */
 
@@ -139,7 +139,7 @@ onUnmounted(() => {
   border-radius: 16px;
   box-shadow: 0 4px 4px 0 rgba(178, 0, 56, 0.25) inset;
     filter: drop-shadow(0 2px 3px rgba(216, 72, 47, 0.40));
-    
+
 }
 
 .heater h1 {

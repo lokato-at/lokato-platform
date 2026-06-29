@@ -238,8 +238,6 @@ function dismissAnimation() {
         <span v-if="occupancyStatusLabel" class="status-pill" :class="occupancyStatus">
           {{ occupancyStatusLabel }}
         </span>
-        <span class="count">{{ currentCount }}</span>
-        <span class="capacity">/ {{ capacityLabel }}</span>
         <span class="connection" :class="{ online: store.sseConnected }">
           {{ connectionLabel }}
         </span>

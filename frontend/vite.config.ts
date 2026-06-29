@@ -19,7 +19,7 @@ export default defineConfig(({ command }) => ({
       // nginx auf http://localhost — dann uebernimmt nginx das /api-Routing
       // und dieser Proxy ist umgangen.
       // Backend-Port 8001 entspricht php artisan serve (legacy Host-Workflow).
-      '/api': 'http://localhost:8001'
+      '/api': 'http://127.0.0.1:8001'
     }
   },
   resolve: {

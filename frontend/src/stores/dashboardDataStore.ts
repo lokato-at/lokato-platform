@@ -14,6 +14,7 @@ export interface Child {
 export interface Room {
     id: number;
     name: string;
+    area?: string | null;
     capacity?: number;
     tolerance?: number;
     status?: {

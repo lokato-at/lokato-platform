@@ -36,10 +36,23 @@ function statusBarUpdate(num: number) {
   const statusBar = document.querySelector(".statusbar");
   if (!statusBar) return;
   const capacity = room.value?.capacity ?? 0;
-  const fill = statusBar.querySelector(".satusfill") as HTMLElement | null;
+  const fill = statusBar.querySelector(".statusfill") as HTMLElement | null;
   if (!fill) return;
   const percentage = capacity > 0 ? Math.min((currentCount.value / capacity) * 100, 100) : 0;
   fill.style.width = `${percentage}%`;
+  if (percentage < 45) {
+    fill.style.background = "linear-gradient(90deg, rgba(0, 125, 83, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #63B852";
+    fill.style.backgroundBlendMode = "hard-light, normal";
+    fill.style.boxShadow = "0 5px 5px 0 rgba(0, 125, 83, 0.30);";
+  } else if (percentage < 75) {
+    fill.style.background = "linear-gradient(90deg, rgba(216, 72, 47, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #F3EE4C";
+    fill.style.backgroundBlendMode = "hard-light, normal";
+    fill.style.boxShadow = "0 5px 5px 0 rgba(216, 72, 47, 0.30)";
+  } else {
+    fill.style.background = "linear-gradient(90deg, rgba(178, 0, 56, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #D8482F";
+    fill.style.backgroundBlendMode = "hard-light, normal";
+    fill.style.boxShadow = "0 5px 5px 0 rgba(216, 72, 47, 0.30)";
+  }
   
 
 }
@@ -114,7 +127,7 @@ onUnmounted(() => {
             </svg></button>
       <div class="status">
         <div class="statusbar">
-          <div class="statusfill"> </div>
+          <div class="statusfill">{{ statusBarUpdate(currentCount) }}</div>
         </div>
         
         <span class="count">{{ currentCount }}</span>
@@ -230,18 +243,14 @@ onUnmounted(() => {
 
 .statusfill {
   justify-self: flex-start;
-  
   position: relative;
   height: 38px;
-  width: 50px;
   top: 8px;
   left:8px;
   max-width: 290px;
   
   border-radius: 36px;
-  background: linear-gradient(90deg, rgba(216, 72, 47, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #F3EE4C;
-  background-blend-mode: hard-light, normal;
-  box-shadow: 0 4px 4px 0 rgba(216, 72, 47, 0.30);
+  
 }
 
 .count {
@@ -278,6 +287,7 @@ onUnmounted(() => {
   position: absolute;
             top: 90px;
   right: 15px;
+   
   
   
 
@@ -286,12 +296,12 @@ onUnmounted(() => {
 .content-back {
   position: relative;
             
-  width: 380px;
+  width: 390px;
 height: 430px;
 border-radius: 20px;
 background: #ECECEC;
 box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset;
-
+overflow-y: auto;
 }
 
 .search {
@@ -307,71 +317,106 @@ box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset;
 }
 
 .child-grid {
-  /*list-style: none;
+  list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 16px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;*/
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  position: absolute;
-            top: 60px;
-            left: 811px;
-            width: 425px;
-            height: 605px;
-            border-radius: 26px;
-            background: #ECECEC;
-            box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset;
+  gap: 18px;
+  position: relative;
+  top: 0px;
+  width: 340px;
+  
+  border-radius: 26px;
+ 
+   
+ 
+            
 }
 
 .child-card {
-  /* display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
-  font-size: 1.1rem; */
   display: grid;
-            grid-template-columns: auto 1fr;
-            align-items: center;
-            gap: 12px;
-            padding: 16px;
-  position: relative;
-            top: 24px;
-            left: 26px;
-            width: 150px;
-            height: 195px;
-            border-radius: 20px;
-            border-top: 1px solid #E62200;
-            border-right: 2px solid #E62200;
-            border-bottom: 8px solid #E62200;
-            border-left: 2px solid #E62200;
-            background: #FAAE20;
+  align-items: center;
+ 
+  padding: 16px;
+  border-radius: 20px;
+  background: #ffffff;
+  font-size: 1.1rem;
+  
+  
 }
 
+
+.child-card:nth-child(4n + 1) {
+  border-top: 1px solid #E62200;
+  border-right: 2px solid #E62200;
+  border-bottom: 8px solid #E62200;
+  border-left: 2px solid #E62200;
+  background: #FAAE20; 
+}
+
+.child-card:nth-child(4n + 2) {
+border-top: 1px solid #F27100;
+border-right: 2px solid #F27100;
+border-bottom: 8px solid #F27100;
+border-left: 2px solid #F27100;
+background: #F3EE4C;
+}
+
+.child-card:nth-child(4n + 3) {
+  border-top: 1px solid #007D53;
+border-right: 2px solid #007D53;
+border-bottom: 8px solid #007D53;
+border-left: 2px solid #007D53;
+background: #63B852;
+}
+
+.child-card:nth-child(4n + 4) {
+  border-top: 1px solid #551BB3;
+border-right: 2px solid #551BB3;
+border-bottom: 8px solid #551BB3;
+border-left: 2px solid #551BB3;
+background: #4EB0F1;
+}
+
+
 .avatar {
-  width: 48px;
-  height: 48px;
+  width: 115px;
+  height: 115px;
   border-radius: 18px;
   object-fit: cover;
+  align-self: center;
+  justify-self: center;
+  position: relative;
+            top: 0px;
+  
+  
 }
 
 .avatar.placeholder {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   background: #e2e8f0;
   color: #334155;
   font-weight: 700;
+  
 }
 
 .name {
-  font-size: 1.2rem;
+  width: 120px;
+  font-size: 15px;
   font-weight: 600;
+  padding-top: 12px ;
+  position: relative;
+  display: grid;
+  align-items: center;
+  text-align: center;
+   justify-self: center;        
+
+  font-family: Nunito, sans-serif;
+  
+            
 }
 
 .info,

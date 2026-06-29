@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useTVRoomStore } from "@/stores/tvRoomStore";
 import type { Room } from "@/stores/dashboardDataStore";
@@ -7,9 +7,21 @@ import type { Room } from "@/stores/dashboardDataStore";
 
 const store = useTVRoomStore();
 const route = useRoute();
-
+const currentArea = ref<"EG_Außenbereich" | "UG">("EG_Außenbereich");
+const cycleIntervalMs = 8000;
+let cycleTimer: number | undefined;
 
 const rooms = computed(() => store.rooms ?? []);
+
+const filteredRooms = computed(() => {
+  if (currentArea.value === "EG_Außenbereich") {
+    return rooms.value.filter((room) => {
+      const area = normalizeArea(room.area);
+      return area === "EG" || area === "AUSSENBEREICH";
+    });
+  }
+  return rooms.value.filter((room) => normalizeArea(room.area) === currentArea.value);
+});
 
 /* const capacityLabel = computed(() => {
   const capacity = room.value?.capacity;
@@ -20,15 +32,31 @@ const connectionLabel = computed(() =>
   store.sseConnected ? "Live verbunden" : "Live Verbindung...",
 );
 
-const roomCountLabel = computed(() =>
-  rooms.value.length > 0 ? `${rooms.value.length} Räume` : "Keine Räume gefunden",
-);
+
+const roomCountLabel = computed(() => {
+  const visibleRooms = filteredRooms.value;
+  return visibleRooms.length > 0 ? `${visibleRooms.length} Räume` : "Keine Räume gefunden";
+});
+
+function normalizeArea(area?: string | null) {
+  return area?.trim().toUpperCase() ?? "";
+}
+
+function cycleArea() {
+  currentArea.value = currentArea.value === "EG_Außenbereich" ? "UG" : "EG_Außenbereich";
+}
 
 function roomFillStyle(room: Room) {
   const count = room.current_count ?? room.children?.length ?? 0;
   const capacity = room.capacity ?? 0;
   const percentage = capacity > 0 ? Math.min((count / capacity) * 100, 100) : 0;
-  return { width: `${percentage}%` };
+  if (percentage < 45) {
+    return { width: `${percentage}%`, background: "linear-gradient(90deg, rgba(56, 189, 248, 0.85), rgba(34, 197, 94, 0.85))" };
+  } else if (percentage < 75) {
+    return { width: `${percentage}%`, background: "linear-gradient(90deg, rgba(250, 174, 32, 0.85), rgba(243, 238, 76, 0.85))" };
+  } else {
+    return { width: `${percentage}%`, background: "linear-gradient(90deg, rgba(216, 72, 47, 0.85), rgba(178, 0, 56, 0.85))" };
+  }
 }
 
 /* function statusBarUpdate(num: number) {
@@ -61,10 +89,14 @@ function childInitials(name?: string) {
 onMounted(() => {
   void store.loadRooms();
   store.connectSSE();
+  cycleTimer = window.setInterval(cycleArea, cycleIntervalMs);
 });
 
 
 onUnmounted(() => {
+  if (cycleTimer != null) {
+    window.clearInterval(cycleTimer);
+  }
   store.disconnectSSE();
 });
 
@@ -76,7 +108,7 @@ onUnmounted(() => {
 <template>
     <section class="room-view">
       
-   <svg class="room-svg" xmlns="http://www.w3.org/2000/svg" width="700" height="199" viewBox="0 0 700 199" fill="none">
+   <svg v-if="currentArea === 'EG_Außenbereich'" class="room-svg" xmlns="http://www.w3.org/2000/svg" width="700" height="199" viewBox="0 0 700 199" fill="none">
   <g filter="url(#filter0_di_55307_2)">
     <path d="M321 126C321 112.193 332.193 101 346 101H576.5C590.307 101 601.5 112.193 601.5 126V162C601.5 175.807 590.307 187 576.5 187H346C332.193 187 321 175.807 321 162V126Z" fill="#D8482F"/>
     <path d="M3 36C3 16.67 18.67 1 38 1H662C681.33 1 697 16.67 697 36V86C697 105.33 681.33 121 662 121H382C373.716 121 367 127.716 367 136V161.059C367 178.719 352.719 193.053 335.059 193.118L128.56 193.88C110.597 193.946 96 179.403 96 161.44V136C96 127.716 89.2843 121 81 121H38C18.67 121 3 105.33 3 86V36Z" fill="#F5F5F5"/>
@@ -100,20 +132,45 @@ onUnmounted(() => {
     </filter>
   </defs>
 </svg>
+
+<svg v-if="currentArea === 'UG'" class="room-svg" xmlns="http://www.w3.org/2000/svg" width="700" height="191" viewBox="0 0 700 191" fill="none">
+  <g filter="url(#filter0_di_55307_3)">
+    <path d="M126 126C126 112.193 137.193 101 151 101H345C358.807 101 370 112.193 370 126V154C370 167.807 358.807 179 345 179H151C137.193 179 126 167.807 126 154V126Z" fill="#F27100"/>
+    <path d="M3 36C3 16.67 18.67 1 38 1H662C681.33 1 697 16.67 697 36V86C697 105.33 681.33 121 662 121H621C612.716 121 606 127.716 606 136V153.059C606 170.719 591.719 185.053 574.059 185.118L367.56 185.88C349.597 185.946 335 171.403 335 153.44V136C335 127.716 328.284 121 320 121H38C18.67 121 3 105.33 3 86V36Z" fill="#F5F5F5"/>
+  </g>
+  <defs>
+    <filter id="filter0_di_55307_3" x="0" y="0" width="700" height="190.88" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="2"/>
+      <feGaussianBlur stdDeviation="1.5"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.847059 0 0 0 0 0.282353 0 0 0 0 0.184314 0 0 0 0.4 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_55307_3"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_55307_3" result="shape"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="4"/>
+      <feGaussianBlur stdDeviation="2"/>
+      <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.698039 0 0 0 0 0 0 0 0 0 0.219608 0 0 0 0.25 0"/>
+      <feBlend mode="normal" in2="shape" result="effect2_innerShadow_55307_3"/>
+    </filter>
+  </defs>
+</svg>
   
     <header class="header">
       <div class="subheader">
         <h1>Willkommen im Hort Pregarten!</h1>
         <section class="area-labels">
-          <div class="room-area-eg">Erdgeschoss</div>
-          <div class="room-area-og">Obergeschoss</div>
-          <!-- <div class="og-backdrop"></div> -->
+          <div class="room-area-eg" :class="{ active: currentArea === 'EG_Außenbereich' }">Erdgeschoss</div>
+          <div class="room-area-og" :class="{ active: currentArea === 'UG' }">Obergeschoss</div>
+        
         </section>
         
         <!-- <p class="subtitle">{{ roomCountLabel }}</p> -->
+        
+        
       </div>
-     
-      
       <span class="connection" :class="{ online: store.sseConnected }">
         {{ connectionLabel }}
       </span>
@@ -139,7 +196,7 @@ onUnmounted(() => {
     <p v-else-if="store.error" class="error">{{ store.error }}</p>
 
     <section v-else class="room-grid">
-      <article v-for="room in rooms" :key="room.id" class="room-card">
+      <article v-for="room in filteredRooms" :key="room.id" class="room-card">
         <div class="room-header">
           <div class="room-icon"></div>
             <div class="room-name">{{ room?.name }}</div>
@@ -194,9 +251,9 @@ header {
 
 .subheader {
   position: relative;
-  left: 20px;
+  left: -5px;
   top: 8px;
-  display: inline-block;
+  display: flex;
   width: 690px;
   height: 110px;
   justify-content: center;
@@ -218,6 +275,7 @@ header {
 
 .header h1 {
   position: relative;
+  left: -5px;
     color: #B20038;
 font-family: Nunito;
 font-size: 34px;
@@ -228,8 +286,8 @@ line-height: normal;
 
 .area-labels {
   position: relative;
-  left: 100px;
-  top: 10px;
+  left: -30px;
+  top: 5px;
   display: flex;
   gap: 20px;
 }
@@ -248,11 +306,12 @@ display: flex;
 color: white;
 font-size: 24px;
 font-weight: 700;
+transition: all 180ms ease-in-out;
 }
 
 .room-area-og {
     position: relative;
-  left: 25px;
+  left: 20px;
   top: 5px;
   font-size: 18px;
   font-weight: 600;
@@ -264,26 +323,37 @@ align-items: center;
 justify-content: center;
 display: flex;
 color: #D8482F;
+transition: all 180ms ease-in-out;
 }
 
-.og-backdrop {
-  position: relative;
-  left: 0px;
-  top: 0px;
-  width: 244px;
-height: 78px;
- border-radius: 25px;
-background: #D8482F;
-box-shadow: 0 3px 4px 0 rgba(178, 0, 56, 0.25);}
-
-.room-area-inactive::backdrop {
-  width: 185px;
-height: 42px;
-  border-radius: 25px;
-background: #D8482F;
-box-shadow: 0 3px 4px 0 rgba(178, 0, 56, 0.25);
-  
+/* .room-area-eg.active {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
+ */
+.room-area-eg:not(.active) {
+    left: 15px;
+  top: 3px;
+   font-size: 18px;
+  font-weight: 600;
+  width: 145px;
+height: 40px;
+color: #D8482F;
+background: white;
+}
+
+.room-area-og.active {
+  left: 35px;
+  top: -5px;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  background: #D8482F;
+  width: 195px;
+height: 50px;
+ 
+}
+
 
 .subtitle {
   
@@ -293,6 +363,9 @@ box-shadow: 0 3px 4px 0 rgba(178, 0, 56, 0.25);
 }
 
 .connection {
+  position: absolute;
+  right: 10px;
+  top: 0px;
   padding: 8px 16px;
   border-radius: 999px;
   background: #fde68a;
@@ -322,8 +395,9 @@ box-shadow: 0 3px 4px 0 rgba(178, 0, 56, 0.25);
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 360px;
-  height: 35px;
+  min-width: 250px;
+ width: 340px;
+  height: 38px;
   border-radius: 15px;
   
   background: #F5F5F5;
@@ -375,7 +449,7 @@ box-shadow: 0 3px 4px 0 rgba(178, 0, 56, 0.25);
   border-radius: 24px;
   padding: 24px;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08); */
-  width: 460px;
+  width: 450px;
   height: 136.401px;
   border-radius: 25px;
 }
@@ -463,11 +537,11 @@ box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
 }
 
 .statusbar {
-  width: 317.11px;
+  width: 315.11px;
 height: 39.964px;
   position: relative;
   display: inline-block;
-  left: 60px;
+  left: 55px;
   bottom: -20px;
   border-radius: 20px;
 background: #F5F5F5;
@@ -475,37 +549,15 @@ box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25) inset;
 }
 
 .satusfill {
-  height: 100%;
+  height: 85%;
   border-radius: 20px;
+  left: 5px;
+  top: 3px;
+  position: relative;
+  max-width: 310px;
   background: linear-gradient(90deg, rgba(56, 189, 248, 0.85), rgba(34, 197, 94, 0.85));
   transition: width 0.25s ease;
 }
 
 
-/* 
-.children {
-  display: grid;
-  gap: 12px;
-}
-
-.child-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.child-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #0f172a;
-  font-weight: 700;
-} */
 </style>

@@ -1,33 +1,37 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
-import { useRoute } from "vue-router";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useTVRoomStore } from "@/stores/tvRoomStore";
 import type { Room } from "@/stores/dashboardDataStore";
 
-
 const store = useTVRoomStore();
-const route = useRoute();
-
+const currentArea = ref<"EG_Außenbereich" | "UG">("EG_Außenbereich");
+const cycleIntervalMs = 8000;
+let cycleTimer: number | undefined;
 
 const rooms = computed(() => store.rooms ?? []);
 
-/* const capacityLabel = computed(() => {
-  const capacity = room.value?.capacity;
-  return typeof capacity === "number" ? String(capacity) : "-";
-}); */
+const filteredRooms = computed(() => {
+  if (currentArea.value === "EG_Außenbereich") {
+    return rooms.value.filter((room) => {
+      const area = normalizeArea(room.area);
+      return area === "EG" || area === "AUSSENBEREICH";
+    });
+  }
+  return rooms.value.filter((room) => normalizeArea(room.area) === currentArea.value);
+});
 
-const connectionLabel = computed(() =>
-  store.sseConnected ? "Live verbunden" : "Live Verbindung...",
-);
+const roomCountLabel = computed(() => {
+  const visibleRooms = filteredRooms.value;
+  return visibleRooms.length > 0 ? `${visibleRooms.length} Räume` : "Keine Räume gefunden";
+});
 
-const roomCountLabel = computed(() =>
-  rooms.value.length > 0 ? `${rooms.value.length} Räume` : "Keine Räume gefunden",
-);
+function normalizeArea(area?: string | null) {
+  return area?.trim().toUpperCase() ?? "";
+}
 
-const ShowOG = computed(() =>
-  
-
-)
+function cycleArea() {
+  currentArea.value = currentArea.value === "EG_Außenbereich" ? "UG" : "EG_Außenbereich";
+}
 
 function roomFillStyle(room: Room) {
   const count = room.current_count ?? room.children?.length ?? 0;
@@ -66,10 +70,13 @@ function childInitials(name?: string) {
 onMounted(() => {
   void store.loadRooms();
   store.connectSSE();
+  cycleTimer = window.setInterval(cycleArea, cycleIntervalMs);
 });
 
-
 onUnmounted(() => {
+  if (cycleTimer != null) {
+    window.clearInterval(cycleTimer);
+  }
   store.disconnectSSE();
 });
 
@@ -81,29 +88,30 @@ onUnmounted(() => {
 <template>
     <section class="tv-view">
 
-      <svg xmlns="http://www.w3.org/2000/svg" width="906" height="208" viewBox="0 0 906 208" fill="none">
-  <g filter="url(#filter0_di_55369_4)">
-    <path d="M3 36C3 16.6701 18.67 1 38 1H868C887.33 1 903 16.67 903 36V93.8534C903 113.132 887.41 128.781 868.131 128.853L618.496 129.787C609.662 129.787 602.5 136.949 602.5 145.783V168C602.5 187.33 586.83 203 567.5 203H338.236C318.814 203 303.106 187.186 303.237 167.764L303.392 144.718C303.452 135.902 296.321 128.723 287.504 128.723H38C18.6701 128.723 3 113.053 3 93.7228V36Z" fill="#F5F5F5"/>
-  </g>
-  <defs>
-    <filter id="filter0_di_55369_4" x="0" y="0" width="906" height="208" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
-      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-      <feOffset dy="2"/>
-      <feGaussianBlur stdDeviation="1.5"/>
-      <feComposite in2="hardAlpha" operator="out"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0.847059 0 0 0 0 0.282353 0 0 0 0 0.184314 0 0 0 0.4 0"/>
-      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_55369_4"/>
-      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_55369_4" result="shape"/>
-      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-      <feOffset dy="4"/>
-      <feGaussianBlur stdDeviation="2"/>
-      <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0.698039 0 0 0 0 0 0 0 0 0 0.219608 0 0 0 0.25 0"/>
-      <feBlend mode="normal" in2="shape" result="effect2_innerShadow_55369_4"/>
-    </filter>
-  </defs>
+      <svg width="903" height="186" viewBox="0 0 903 186" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g filter="url(#filter0_di_55369_4)">
+<path d="M0 36C0 16.6701 15.67 1 35 1H865C884.33 1 900 16.67 900 36V71.8534C900 91.1323 884.41 106.781 865.131 106.853L615.496 107.787C606.662 107.787 599.5 114.949 599.5 123.783V146C599.5 165.33 583.83 181 564.5 181H335.236C315.814 181 300.106 165.186 300.237 145.764L300.392 122.718C300.452 113.902 293.321 106.723 284.504 106.723H35C15.6701 106.723 0 91.0527 0 71.7228V36Z" fill="#F5F5F5"/>
+</g>
+<defs>
+<filter id="filter0_di_55369_4" x="-3" y="0" width="906" height="186" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="2"/>
+<feGaussianBlur stdDeviation="1.5"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.847059 0 0 0 0 0.282353 0 0 0 0 0.184314 0 0 0 0.4 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_55369_4"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_55369_4" result="shape"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="4"/>
+<feGaussianBlur stdDeviation="2"/>
+<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.698039 0 0 0 0 0 0 0 0 0 0.219608 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="shape" result="effect2_innerShadow_55369_4"/>
+</filter>
+</defs>
 </svg>
+
 
 
     <header class="header">
@@ -111,9 +119,8 @@ onUnmounted(() => {
         <h1>Willkommen im Hort Pregarten!</h1>
         <p class="subtitle">{{ roomCountLabel }}</p>
         <section class="area-labels">
-          <div class="room-area-eg">Erdgeschoss</div>
-          <div v-show="ShowOG" class="room-area-og">Obergeschoss</div>
-
+          <div v-if="currentArea === 'EG_Außenbereich'" class="room-area-eg" :class="{ active: currentArea === 'EG_Außenbereich' }">Erdgeschoss</div>
+          <div v-if="currentArea === 'UG'" class="room-area-og" :class="{ active: currentArea === 'UG' }">Obergeschoss</div>
         </section>
       </div>
       <!-- <span class="connection" :class="{ online: store.sseConnected }">
@@ -125,9 +132,7 @@ onUnmounted(() => {
     <p v-else-if="store.error" class="error">{{ store.error }}</p>
 
     <div v-else class="room-grid">
-
-
-      <article v-for="room in rooms" :key="room.id" class="room-card">
+      <article v-for="room in filteredRooms" :key="room.id" class="room-card">
         <div class="room-header">
           <div class="room-icon"></div>
             <div class="room-name">{{ room.name }}</div>
@@ -175,13 +180,13 @@ onUnmounted(() => {
   position: absolute;
   width: 100%;
     height: 230px;
-    top: 0px;
+    top: -10px;
    right: 0px;
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
   gap: 3px;
-  margin-bottom: 26px;
+  margin-bottom: 22px;
 
 }
 
@@ -197,10 +202,11 @@ onUnmounted(() => {
 .header h1 {
     color: #2A000D;
 font-family: Nunito;
-font-size: 40px;
+font-size: 38px;
 font-style: normal;
 font-weight: 500;
 line-height: normal;
+margin-bottom: 4px;
 }
 
 
@@ -213,31 +219,37 @@ line-height: normal;
 
 }
 
-.room-area-eg {
-
+.room-area-eg,
+.room-area-og {
   width: 250px;
-height:55px;
-border-radius: 18px;
-background: #F27100;
-align-items: center;
-justify-content: center;
-display: flex;
-color: white;
-font-size: 24px;
-font-weight: 700;
+  height: 55px;
+  border-radius: 18px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  font-size: 24px;
+  font-weight: 700;
+  transition: all 180ms ease-in-out;
+}
+
+.room-area-eg {
+  background: #F27100;
+  color: white;
 }
 
 .room-area-og {
-  font-size: 24px;
-  font-weight: 700;
-  width: 250px;
-height: 55px;
-border-radius: 18px;
-background: white;
-align-items: center;
-justify-content: center;
-display: flex;
-color: #D8482F;
+  background: #D8482F;
+  color: white;
+}
+
+.room-area-eg.active {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+.room-area-og.active {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 3px rgba(216, 72, 47, 0.22);
 }
 
 .subtitle {
@@ -273,17 +285,28 @@ color: #D8482F;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
-  background: rgba(245, 245, 245, 0.90);
+  background: rgba(245, 245, 245, 0.80);
+  
   border-radius: 16px;
 }
 
+.room-grid svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  
+}
+
 .room-card {
-  width: 350;
-  height: 185px;
+  max-width: 340px;
+  height: 175px;
   background: #ffffff;
   border-radius: 24px;
   padding: 24px;
-
+  
 }
 
 .room-card:nth-child(1) {
@@ -346,9 +369,9 @@ box-shadow: 0 4px 4px 0 rgba(242, 113, 0, 0.40);
 
 .room-name {
   position: relative;
-  left: 30px;
+  left: 40px;
   top: 0px;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   font-family: Nunito, sans-serif;
 

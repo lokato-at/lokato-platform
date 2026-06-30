@@ -109,6 +109,48 @@ sudo -u www-data php /var/www/lokato/backend/artisan tinker --execute \
 
 Oder einfach Variante B mit anderen Env-Vars erneut ausführen.
 
+## Stammdaten beim Erststart (Räume + Devices)
+
+Wie der Admin-User seedet `start-prod-raspi.sh` **bewusst keine** Stammdaten. Nach `migrate` sind `rooms`, `devices` und `children` **leer** — die Tablet-Ansicht (`/#/tablet/1`) liefert dann **404**, weil Raum 1 nicht existiert (Route-Model-Binding in `RoomsController::occupancy` + `findOrFail` im `SseStreamController` schlagen beide fehl).
+
+Du brauchst mindestens **Räume** (für die Anzeige) und **Devices** (Scanner→Raum-Mapping für Scans). **Nicht** den `ChildSeeder` — der legt Dev-Fixtures (Fake-Kinder wie „LILA-AUTO") an. Auch **nicht** `db:seed` ohne `--class` (das ruft `DatabaseSeeder` = alle Seeder inkl. Kinder).
+
+### Variante A: beim Deploy automatisch (empfohlen für den Erststart)
+
+```bash
+SEED_MASTERDATA=1 SEED_ADMIN=1 ADMIN_USER_PASSWORD='DEIN_PASSWORT' \
+  DB_PASSWORD="$DB_PASSWORD" ./start-prod-raspi.sh
+```
+
+`SEED_MASTERDATA=1` seedet `RoomSeeder` + `DeviceSeeder` — **nur wenn die `rooms`-Tabelle leer ist** (die Seeder nutzen `insert()`/`create()` und sind nicht idempotent; der Count-Guard im Skript verhindert Duplikate bei wiederholten Läufen).
+
+### Variante B: manuell
+
+```bash
+sudo -u www-data php /var/www/lokato/backend/artisan db:seed --class=RoomSeeder   --force
+sudo -u www-data php /var/www/lokato/backend/artisan db:seed --class=DeviceSeeder --force
+```
+
+`RoomSeeder` legt Garten (id 1), Obergeschoss (id 2), Untergeschoss (id 3) an — passend zu den Tablet-Bookmarks `/#/tablet/1..3`. `DeviceSeeder` ordnet die Scanner `RaspberryChild01..03` diesen Räumen zu und **muss nach** `RoomSeeder` laufen (er sucht die Räume per Name).
+
+> ⚠️ Beide Seeder sind **nicht idempotent** — nur auf leeren Tabellen ausführen, sonst Duplikate. Zum Zurücksetzen (nur ohne echte Bewegungsdaten!):
+> ```bash
+> sudo mysql lokato_db -e "SET FOREIGN_KEY_CHECKS=0; TRUNCATE rooms; TRUNCATE devices; SET FOREIGN_KEY_CHECKS=1;"
+> ```
+> `TRUNCATE` setzt auch den AUTO_INCREMENT zurück, damit Garten wieder id 1 bekommt. Danach neu seeden.
+
+### Variante C: über die Admin-UI (prod-sauber, eigene Raum-Namen)
+
+Login als Admin → Räume/Devices anlegen. Die IDs zählen dann vom AUTO_INCREMENT hoch (nicht zwingend 1/2/3) → Tablet-Bookmarks entsprechend setzen (`/#/tablet/<echte-id>`).
+
+### Verifikation
+
+```bash
+curl -s http://localhost/api/v1/rooms; echo                       # Räume + IDs
+curl -s -w '\n[%{http_code}]\n' http://localhost/api/v1/rooms/1/occupancy
+```
+Erwartet: Liste der Räume, occupancy → 200. Danach lädt `/#/tablet/1`. (`bash pi-doctor.sh` zeigt den Gesamt-Status.)
+
 ## Pi-Befehls-Cheat-Sheet
 
 | Was | Befehl |
@@ -124,6 +166,9 @@ Oder einfach Variante B mit anderen Env-Vars erneut ausführen.
 | Log-Audit jetzt | `cd /var/www/lokato && python3 tools/log_audit/log_audit.py check --period daily --config tools/log_audit/config.json` |
 | Backend-`.env` | `sudo nano /var/www/lokato/backend/.env` |
 | Backend re-deployen | `./start-prod-raspi.sh` (idempotent) |
+| Stammdaten seeden | `sudo -u www-data php …/artisan db:seed --class=RoomSeeder --force` (dann `DeviceSeeder`) |
+| Healthcheck (alles) | `bash pi-doctor.sh` |
+| Pre-Deploy-Check (Dev) | `bash predeploy-check.sh` |
 
 ## Test-Scan auf dem Pi
 

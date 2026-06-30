@@ -53,6 +53,14 @@ DB_PASSWORD="${DB_PASSWORD:-changeme}"
 INSTALL_DEPS="${INSTALL_DEPS:-1}"
 CONFIG_NETWORK="${CONFIG_NETWORK:-1}"
 
+# SEED_ADMIN=1 seedet am Ende den Admin-User (sonst /admin unerreichbar). Liest
+# ADMIN_USER_EMAIL/_PASSWORD/_NAME; ohne Passwort wird eins generiert + gedruckt.
+SEED_ADMIN="${SEED_ADMIN:-0}"
+
+# SEED_MASTERDATA=1 seedet Raeume + Devices beim Erststart (sonst Tablet-404).
+# Nur wenn rooms leer ist — Seeder sind nicht idempotent. Kein ChildSeeder.
+SEED_MASTERDATA="${SEED_MASTERDATA:-0}"
+
 # ----- Helpers ---------------------------------------------------------------
 info() { echo -e "\033[36m==> $*\033[0m"; }
 ok()   { echo -e "\033[32m[OK] $*\033[0m"; }
@@ -70,10 +78,8 @@ as_www_data() {
         "$@"
 }
 
-# Legt $target aus $example an, falls es noch nicht existiert.
-# Rueckgabe: 0 = frisch angelegt, 1 = existierte bereits (wird NICHT angefasst).
-# Wichtig: Aufrufer MUESSEN den Rueckgabewert behandeln (if / || true), sonst
-# bricht `set -e` bei "existiert bereits" (return 1) das Skript ab.
+# Legt $target aus $example an. Rueckgabe: 0 = frisch angelegt, 1 = war schon da.
+# Aufrufer MUESSEN das behandeln (if / || true), sonst bricht `set -e` bei return 1.
 ensure_file_from_example() {
     local target="$1"
     local example="$2"
@@ -183,10 +189,8 @@ configure_database() {
     sudo systemctl enable --now mariadb 2>/dev/null \
         || sudo systemctl enable --now mysql
 
-    # Wenn schon eine deployte .env existiert, ist SIE die Wahrheit ueber die
-    # DB-Credentials. Uebernimm sie, damit der MariaDB-User auf exakt das
-    # Passwort gesetzt wird, das auch in der .env steht — sonst laufen beide
-    # auseinander und `migrate` scheitert mit "Access denied for user".
+    # Deployte .env ist die Wahrheit ueber die DB-Credentials — uebernehmen, sonst
+    # laufen MariaDB-User-Pass und .env auseinander (migrate: "Access denied").
     local deployed_env="$BACKEND_DEPLOY/.env"
     if [[ -f "$deployed_env" ]]; then
         local v
@@ -329,16 +333,13 @@ deploy_backend() {
         "$BACKEND_DEPLOY/storage/app/public/children" \
         "$BACKEND_DEPLOY/bootstrap/cache"
 
-    # .env aus Pi-Template, wenn noch keine da ist. Bei FRISCHER .env die
-    # Runtime-Werte hineinspiegeln: DB_PASSWORD (sonst Drift zum MariaDB-User,
-    # siehe configure_database) und APP_URL (echte Pi-IP). Eine bereits
-    # vorhandene .env wird oben gar nicht erst angefasst.
+    # .env aus Pi-Template, wenn noch keine da ist. Nur bei FRISCHER .env die
+    # Runtime-Werte spiegeln: DB_PASSWORD (sonst Drift zum MariaDB-User) + APP_URL.
     if ensure_file_from_example "$BACKEND_DEPLOY/.env" "$BACKEND_SRC/.env.raspi.example"; then
         local _ip _pw_esc
         _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
         [[ -z "$_ip" ]] && _ip="$PI_IP"
-        # sed-Sonderzeichen im Passwort escapen (\ / & |), damit der Wert
-        # buchstabengetreu landet.
+        # sed-Sonderzeichen im Passwort escapen (\ / & |).
         _pw_esc="$(printf '%s' "$DB_PASSWORD" | sed -e 's/[\\/&|]/\\&/g')"
         sudo sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$_pw_esc|" "$BACKEND_DEPLOY/.env"
         sudo sed -i "s|^APP_URL=.*|APP_URL=http://$_ip|" "$BACKEND_DEPLOY/.env"
@@ -350,6 +351,14 @@ deploy_backend() {
     sudo find "$BACKEND_DEPLOY/bootstrap/cache" -maxdepth 1 -name "*.php" -delete
 
     sudo chown -R www-data:www-data "$BACKEND_DEPLOY"
+
+    # Defensiv: ein stale Classmap (auf geloeschte/umbenannte Klassen) crasht sonst
+    # den pre-package-uninstall-Hook. Autoload OHNE Scripts neu generieren raeumt es weg.
+    if [[ -d "$BACKEND_DEPLOY/vendor" ]]; then
+        info "Autoload defensiv neu generieren (entfernt stale Classmap-Eintraege)..."
+        as_www_data composer dump-autoload \
+            --working-dir="$BACKEND_DEPLOY" --no-scripts -o --no-interaction 2>/dev/null || true
+    fi
 
     info "Composer install (--no-dev) im Deploy-Verzeichnis..."
     as_www_data composer install \
@@ -367,6 +376,23 @@ deploy_backend() {
 
     info "Laravel optimieren + migrieren..."
     as_www_data php "$BACKEND_DEPLOY/artisan" config:clear
+
+    # DB-Login mit den .env-Credentials VOR migrate testen — gibt bei Drift einen
+    # Klartext-Hinweis statt des rohen "SQLSTATE ... Access denied".
+    local _du _dp _dd _dh
+    _du="$(sudo sed -n 's/^DB_USERNAME=//p' "$BACKEND_DEPLOY/.env" | head -n1)"
+    _dp="$(sudo sed -n 's/^DB_PASSWORD=//p' "$BACKEND_DEPLOY/.env" | head -n1)"
+    _dd="$(sudo sed -n 's/^DB_DATABASE=//p' "$BACKEND_DEPLOY/.env" | head -n1)"
+    _dh="$(sudo sed -n 's/^DB_HOST=//p'     "$BACKEND_DEPLOY/.env" | head -n1)"
+    if ! mysql -h "${_dh:-127.0.0.1}" -u "$_du" -p"$_dp" \
+            -e "USE \`$_dd\`; SELECT 1;" >/dev/null 2>&1; then
+        fail "DB-Login mit den .env-Credentials (User '$_du', DB '$_dd') fehlgeschlagen.
+       .env-DB_PASSWORD passt nicht zum MariaDB-User. Fix:
+         sudo mysql -e \"ALTER USER '$_du'@'localhost' IDENTIFIED BY '<.env-DB_PASSWORD>'; FLUSH PRIVILEGES;\"
+       oder DB_PASSWORD in $BACKEND_DEPLOY/.env angleichen, dann erneut starten."
+    fi
+    ok "DB-Login ok (.env <-> MariaDB konsistent)."
+
     as_www_data php "$BACKEND_DEPLOY/artisan" migrate --force
     as_www_data php "$BACKEND_DEPLOY/artisan" config:cache
     as_www_data php "$BACKEND_DEPLOY/artisan" route:cache
@@ -378,6 +404,36 @@ deploy_backend() {
     if [[ ! -L "$BACKEND_DEPLOY/public/storage" ]]; then
         as_www_data php "$BACKEND_DEPLOY/artisan" storage:link
     fi
+
+    # Optional Admin-User seeden (SEED_ADMIN=1) — idempotent (updateOrCreate).
+    if [[ "$SEED_ADMIN" == "1" ]]; then
+        info "Admin-User seeden (SEED_ADMIN=1)..."
+        as_www_data env \
+            ADMIN_USER_EMAIL="${ADMIN_USER_EMAIL:-admin@lokato.local}" \
+            ADMIN_USER_NAME="${ADMIN_USER_NAME:-Lokato Admin}" \
+            ADMIN_USER_PASSWORD="${ADMIN_USER_PASSWORD:-}" \
+            php "$BACKEND_DEPLOY/artisan" db:seed --class=AdminUserSeeder --force
+        ok "Admin-User geseedet (E-Mail: ${ADMIN_USER_EMAIL:-admin@lokato.local})."
+    fi
+
+    # Optional Stammdaten seeden (SEED_MASTERDATA=1) — nur wenn rooms leer ist
+    # (Seeder nicht idempotent). DeviceSeeder nach RoomSeeder (sucht Raeume per Name).
+    if [[ "$SEED_MASTERDATA" == "1" ]]; then
+        local _rooms_count
+        _rooms_count="$(mysql -h "${_dh:-127.0.0.1}" -u "$_du" -p"$_dp" -N -B \
+            -e "SELECT COUNT(*) FROM \`$_dd\`.rooms;" 2>/dev/null || echo "")"
+        if [[ "$_rooms_count" == "0" ]]; then
+            info "Stammdaten seeden (SEED_MASTERDATA=1, rooms-Tabelle leer)..."
+            as_www_data php "$BACKEND_DEPLOY/artisan" db:seed --class=RoomSeeder   --force
+            as_www_data php "$BACKEND_DEPLOY/artisan" db:seed --class=DeviceSeeder --force
+            ok "Stammdaten geseedet (Raeume + Devices)."
+        elif [[ "$_rooms_count" =~ ^[0-9]+$ ]]; then
+            info "rooms enthaelt bereits $_rooms_count Eintraege — Stammdaten-Seed uebersprungen (kein Duplikat)."
+        else
+            warn "rooms-Count nicht lesbar — Stammdaten-Seed uebersprungen."
+        fi
+    fi
+
     ok "Backend deployt."
 }
 
@@ -510,6 +566,7 @@ print_summary() {
 
   MQTT-Subscriber:      systemctl status lokato-mqtt
   MQTT-Logs:            journalctl -u lokato-mqtt -f
+  Healthcheck (alles):  bash $PROJECT_ROOT/pi-doctor.sh
 
   Bookmark fuer Tablets:        http://$actual_ip/
   Dashboard-Bookmark:           http://$actual_ip/#/dashboard
@@ -519,7 +576,8 @@ print_summary() {
    1) DB-Passwort in $BACKEND_DEPLOY/.env aendern (aktuell: $DB_PASSWORD)
       und MariaDB-User-Passwort entsprechend mit ALTER USER neu setzen.
    2) APP_URL in $BACKEND_DEPLOY/.env auf "http://$actual_ip" pruefen.
-   3) Admin-User anlegen (sonst ist /admin nicht erreichbar). Zwei Wege:
+   3) Admin-User anlegen (sonst ist /admin nicht erreichbar) — entfaellt, wenn
+      du mit SEED_ADMIN=1 ADMIN_USER_PASSWORD=... gestartet hast. Zwei Wege:
 
       a) Tinker (einmaliger Befehl, beliebige Credentials):
          sudo -u www-data php $BACKEND_DEPLOY/artisan tinker --execute \\
@@ -530,6 +588,12 @@ print_summary() {
            sudo -E -u www-data php $BACKEND_DEPLOY/artisan db:seed \\
            --class=AdminUserSeeder --force
 
+   3b) Stammdaten anlegen — sonst liefert das Tablet 404 (leere rooms/devices).
+       Entfaellt, wenn du mit SEED_MASTERDATA=1 gestartet hast. Manuell:
+         sudo -u www-data php $BACKEND_DEPLOY/artisan db:seed --class=RoomSeeder   --force
+         sudo -u www-data php $BACKEND_DEPLOY/artisan db:seed --class=DeviceSeeder --force
+       (Seeder sind NICHT idempotent — nur auf leeren Tabellen ausfuehren.)
+
    4) Reboot zum Test, dass alles automatisch hochkommt.
 
 ==============================================================================
@@ -537,9 +601,41 @@ print_summary() {
 EOF
 }
 
+# ----- 0) Preflight: Repo-Vollstaendigkeit + Platz, BEVOR die langsamen -------
+#         Schritte (apt/composer/npm) laufen. Faengt "falsches Verzeichnis"
+#         und unvollstaendige Checkouts frueh statt nach 5 min apt.
+preflight() {
+    info "Preflight-Checks..."
+    [[ -f "$BACKEND_SRC/artisan" ]]       || fail "backend/artisan fehlt — falsches PROJECT_ROOT ($PROJECT_ROOT)?"
+    [[ -f "$FRONTEND_SRC/package.json" ]] || fail "frontend/package.json fehlt."
+
+    local req f
+    req=(
+        "$BACKEND_SRC/.env.raspi.example"
+        "$FRONTEND_SRC/.env.raspi.example"
+        "$DOCKER_DIR/nginx/prod.conf"
+        "$DOCKER_DIR/php-fpm/lokato-pool.conf"
+        "$DOCKER_DIR/mosquitto/config/mosquitto-pi.conf"
+        "$DOCKER_DIR/systemd/lokato-mqtt.service"
+        "$DOCKER_DIR/sql/init/01_schema.sql"
+    )
+    for f in "${req[@]}"; do
+        [[ -f "$f" ]] || fail "Pflichtdatei fehlt: $f"
+    done
+
+    # Freier Platz auf / — Build/Composer/npm brauchen Luft.
+    local free_mb
+    free_mb="$(df -Pm / 2>/dev/null | awk 'NR==2 {print $4}')"
+    if [[ "$free_mb" =~ ^[0-9]+$ ]] && (( free_mb < 1500 )); then
+        warn "Nur ${free_mb} MB frei auf / — Composer/npm-Build koennten knapp werden."
+    fi
+    ok "Preflight ok — Repo vollstaendig."
+}
+
 # ----- Main ------------------------------------------------------------------
 info "Lokato Produktions-Setup startet (Pi-IP-Ziel: $PI_IP)"
 
+preflight
 install_system_packages
 configure_network
 configure_database

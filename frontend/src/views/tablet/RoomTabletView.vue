@@ -126,6 +126,7 @@ function tryTriggerAnimation() {
   if (Date.now() - lastTriggerAt.value < cooldownMs) return;
 
   const pick = files[Math.floor(Math.random() * files.length)];
+  if (pick === undefined) return;
   currentAnimation.value = pick;
   lastTriggerAt.value = Date.now();
 }

@@ -56,7 +56,7 @@ describe('roomTabletStore.handleOccupancyUpdate', () => {
     })
 
     expect(store.snapshot.current_count).toBe(1)
-    expect(store.snapshot.children[0].id).toBe(99)
+    expect(store.snapshot.children[0]!.id).toBe(99)
   })
 
   it('preserves existing room metadata when payload omits capacity/tolerance/status', () => {

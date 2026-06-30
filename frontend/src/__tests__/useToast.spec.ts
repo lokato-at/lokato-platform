@@ -45,7 +45,7 @@ describe('useToast', () => {
 
     vi.advanceTimersByTime(1000)
     expect(toasts.value).toHaveLength(1)
-    expect(toasts.value[0].message).toBe('B')
+    expect(toasts.value[0]!.message).toBe('B')
 
     vi.advanceTimersByTime(2000)
     expect(toasts.value).toHaveLength(0)

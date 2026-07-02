@@ -351,6 +351,40 @@ deploy_backend() {
 
     sudo chown -R www-data:www-data "$BACKEND_DEPLOY"
 
+    # --- Vendor-Konsistenz erzwingen (Branch-Switch-Haertung) ----------------
+    # vendor/ ist oben vom rsync ausgeschlossen (--exclude=vendor/) und ueber-
+    # lebt daher Branch-Wechsel unangetastet. Wenn die frisch gesyncte
+    # composer.lock nicht mehr zu dem passt, was physisch in vendor/ liegt
+    # (Paket dazugekommen ODER entfernt — z.B. l5-swagger, das es auf aelteren
+    # Branches gab, auf main/frontend-rework aber nicht mehr), laufen composer-
+    # Metadaten und Klassen-Dateien auseinander: `composer install` meldet
+    # "Nothing to install" (installed.json passt zur Lock), aber der post-
+    # autoload-dump-Hook `package:discover` crasht, weil eine Config eine Klasse
+    # aus einem nicht (mehr) installierten Paket referenziert
+    # (config/l5-swagger.php -> \L5Swagger\Generator::OPEN_API_...). Unter
+    # `set -e` reisst das den kompletten Deploy ab.
+    #
+    # Fix: vendor/ von Grund auf neu bauen, sobald sich composer.lock geaendert
+    # hat (oder vendor unvollstaendig ist). Der Stempel liegt in $DEPLOY_ROOT,
+    # ausserhalb von backend/ — der Backend-rsync fasst ihn nie an. Kostet nur
+    # bei echter Lock-Aenderung die volle Install-Zeit; sonst wird vendor/
+    # wiederverwendet.
+    local lock_file="$BACKEND_DEPLOY/composer.lock"
+    local lock_stamp="$DEPLOY_ROOT/.lokato-composer-lock.sha256"
+    local lock_now="" lock_prev=""
+    [[ -f "$lock_file"  ]] && lock_now="$(sudo sha256sum "$lock_file" | awk '{print $1}')"
+    [[ -f "$lock_stamp" ]] && lock_prev="$(sudo cat "$lock_stamp" | awk '{print $1}')"
+
+    if [[ ! -d "$BACKEND_DEPLOY/vendor" || ! -f "$BACKEND_DEPLOY/vendor/composer/installed.json" ]]; then
+        warn "vendor/ fehlt oder unvollstaendig — Composer baut von Grund auf neu."
+        sudo rm -rf "$BACKEND_DEPLOY/vendor"
+    elif [[ -n "$lock_now" && "$lock_now" != "$lock_prev" ]]; then
+        warn "composer.lock hat sich geaendert (Branch-Wechsel?) — stale vendor/ wird verworfen, sonst driften Metadaten und Klassen-Dateien auseinander."
+        sudo rm -rf "$BACKEND_DEPLOY/vendor"
+    else
+        info "composer.lock unveraendert — vendor/ wird wiederverwendet."
+    fi
+
     info "Composer install (--no-dev) im Deploy-Verzeichnis..."
     as_www_data composer install \
         --working-dir="$BACKEND_DEPLOY" \
@@ -358,6 +392,12 @@ deploy_backend() {
         --optimize-autoloader \
         --no-interaction \
         --prefer-dist
+
+    # Lock-Stempel erst NACH erfolgreichem Install schreiben (unter `set -e`
+    # kommen wir hier nur an, wenn composer sauber durchlief -> vendor/ ist jetzt
+    # konsistent zur Lock). Beim naechsten Lauf entscheidet der Vergleich, ob
+    # neu gebaut werden muss.
+    [[ -n "$lock_now" ]] && printf '%s\n' "$lock_now" | sudo tee "$lock_stamp" >/dev/null
 
     # APP_KEY generieren, wenn leer.
     if ! sudo grep -qE '^APP_KEY=base64:' "$BACKEND_DEPLOY/.env"; then

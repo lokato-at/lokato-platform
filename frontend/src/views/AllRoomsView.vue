@@ -59,17 +59,6 @@ function roomFillStyle(room: Room) {
   }
 }
 
-/* function statusBarUpdate(num: number) {
-  const statusBar = document.querySelector(".statusbar");
-  if (!statusBar) return;
-  const capacity = room.value?.capacity ?? 0;
-  const fill = statusBar.querySelector(".satusfill") as HTMLElement | null;
-  if (!fill) return;
-  const percentage = capacity > 0 ? Math.min((currentCount.value / capacity) * 100, 100) : 0;
-  fill.style.width = `${percentage}%`;
-  
-
-} */
 
 function childInitials(name?: string) {
   if (!name) return "?";
@@ -167,9 +156,6 @@ onUnmounted(() => {
         
         </section>
         
-        <!-- <p class="subtitle">{{ roomCountLabel }}</p> -->
-        
-        
       </div>
       <span class="connection" :class="{ online: store.sseConnected }">
         {{ connectionLabel }}
@@ -198,17 +184,17 @@ onUnmounted(() => {
     <section v-else class="room-grid">
       <article v-for="room in filteredRooms" :key="room.id" class="room-card">
         <div class="room-header">
-          <div class="room-icon"></div>
-            <div class="room-name">{{ room?.name }}</div>
+          <div class="room-icon-placeholder"></div>
+          <div class="room-name">{{ room?.name }}</div>
             <!-- <div class="room-area">{{ room.area ?? "Bereich nicht verfügbar" }}</div>  -->
           
           <div class="room-count">
             {{ room.current_count ?? room.children?.length ?? 0 }} / {{ room.capacity ?? "-" }}
           </div>
+          
         </div>
-
         <div class="statusbar">
-          <div class="satusfill" :style="roomFillStyle(room)"></div>
+          <div class="statusfill" :style="roomFillStyle(room)"></div>
         </div>
 
         <div class="children">
@@ -332,14 +318,14 @@ transition: all 180ms ease-in-out;
 }
  */
 .room-area-eg:not(.active) {
-    left: 15px;
-  top: 3px;
-   font-size: 18px;
+  left: 15px;
+  top: 5px;
+  font-size: 18px;
   font-weight: 600;
   width: 145px;
-height: 40px;
-color: #D8482F;
-background: white;
+  height: 40px;
+  color: #D8482F;
+  background: white;
 }
 
 .room-area-og.active {
@@ -396,15 +382,11 @@ height: 50px;
   align-items: center;
   gap: 8px;
   min-width: 250px;
- width: 340px;
+  width: 330px;
   height: 38px;
   border-radius: 15px;
-  
   background: #F5F5F5;
-/* element_shadow_blue */
   box-shadow: 0 4px 4px 0 rgba(85, 27, 179, 0.25) inset, 0 4px 4px 0 rgba(56, 64, 201, 0.25);
-  display: flex;
-  align-items: center;
   padding: 4px 8px;
 }
 
@@ -421,6 +403,7 @@ height: 50px;
   background: transparent;
   cursor: pointer;
   font-size: 1.2rem;
+
 }
 
 .search svg {
@@ -497,16 +480,30 @@ box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
 .room-header {
   display: flex;
   justify-content: space-between;
+  gap: 0px;
   align-items: flex-start;
-  gap: 20px;
+  height: 40px;
   margin-bottom: 18px;
   
 }
 
+.room-icon-placeholder {
+  position: relative;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-self: flex-start;
+  padding: 10px;
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  background: lightgray;
+}
+
 .room-name {
   position: relative;
-  left: 18px;
-  top: 8px;
+  left: -15px;
+  top: 10px;
   font-size: 18px;
   font-weight: 700;
   font-family: Nunito, sans-serif;
@@ -537,25 +534,24 @@ box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
 }
 
 .statusbar {
-  width: 315.11px;
-height: 39.964px;
+  width: 290px;
+  height: 39.964px;
   position: relative;
   display: inline-block;
-  left: 55px;
+  left: 60px;
   bottom: -20px;
   border-radius: 20px;
-background: #F5F5F5;
-box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25) inset;
+  background: #F5F5F5;
+  box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25) inset;
 }
 
-.satusfill {
+.statusfill {
   height: 85%;
   border-radius: 20px;
   left: 5px;
   top: 3px;
   position: relative;
-  max-width: 310px;
-  background: linear-gradient(90deg, rgba(56, 189, 248, 0.85), rgba(34, 197, 94, 0.85));
+  max-width: 285px;
   transition: width 0.25s ease;
 }
 

@@ -1,6 +1,6 @@
 <template>
   <div id="app">
-    <header v-if="!isTabletRoute" class="header">
+    <header v-if="!isTabletRoute && !isTVRoute && !isAllRoomsView" class="header">
       <div class="header-inner">
         <div class="brand-title">
           <img
@@ -42,7 +42,7 @@
       </div>
     </header>
 
-    <picture v-if="!isTabletRoute && bannerVisible">
+    <picture v-if="!isTabletRoute && !isTVRoute && !isAllRoomsView && bannerVisible">
       <img
         src="/branding/facility-banner.webp"
         alt=""
@@ -69,7 +69,7 @@
       </router-link>
     </nav>
 
-    <hr v-if="!isTabletRoute" />
+    <hr v-if="!isTabletRoute && !isTVRoute && !isAllRoomsView" />
     <router-view />
     <ToastStack />
   </div>
@@ -88,6 +88,8 @@ const auth = useAuthStore();
 const { config: branding } = useBranding();
 
 const isTabletRoute = computed(() => route.path.startsWith("/tablet"));
+const isTVRoute = computed(() => route.path.startsWith("/tv"));
+const isAllRoomsView = computed(() => route.path.startsWith("/all-rooms"));
 
 // Optional branding assets — hidden if the file is missing (onerror).
 const logoVisible = ref(true);

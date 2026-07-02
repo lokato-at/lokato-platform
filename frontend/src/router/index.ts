@@ -9,6 +9,8 @@ const RoomsAdminView = () => import('../views/admin/RoomsAdminView.vue')
 const DevicesAdminView = () => import('../views/admin/DevicesAdminView.vue')
 const MovementAdminView = () => import('../views/admin/MovementAdminView.vue')
 const RoomTabletView = () => import('../views/tablet/RoomTabletView.vue')
+const TVRoomView = () => import('../views/TVRoomView.vue')
+const AllRoomsView = () => import('../views/AllRoomsView.vue')
 const LoginView = () => import('../views/LoginView.vue')
 
 const routes = [
@@ -32,6 +34,18 @@ const routes = [
     path: '/tablet',
     name: 'RoomTabletByQuery',
     component: RoomTabletView,
+    meta: { public: true },
+  },
+  {
+    path: '/all-rooms',
+    name: 'AllRoomsView',
+    component: AllRoomsView,
+    meta: { public: true },
+  },
+  {
+    path: '/tv',
+    name: 'TVRoomView',
+    component: TVRoomView,
     meta: { public: true },
   },
   {

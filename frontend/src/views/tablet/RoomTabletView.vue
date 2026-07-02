@@ -59,15 +59,15 @@ function statusBarUpdate(num: number) {
   if (percentage < 45) {
     fill.style.background = "linear-gradient(90deg, rgba(0, 125, 83, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #63B852";
     fill.style.backgroundBlendMode = "hard-light, normal";
-    fill.style.boxShadow = "0 5px 5px 0 rgba(0, 125, 83, 0.30);";
+    fill.style.boxShadow = "0 4px 4px 0 rgba(0, 125, 83, 0.30)";
   } else if (percentage < 75) {
     fill.style.background = "linear-gradient(90deg, rgba(216, 72, 47, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #F3EE4C";
     fill.style.backgroundBlendMode = "hard-light, normal";
-    fill.style.boxShadow = "0 5px 5px 0 rgba(216, 72, 47, 0.30)";
+    fill.style.boxShadow = "0 4px 4px 0 rgba(216, 72, 47, 0.30)";
   } else {
     fill.style.background = "linear-gradient(90deg, rgba(178, 0, 56, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #D8482F";
     fill.style.backgroundBlendMode = "hard-light, normal";
-    fill.style.boxShadow = "0 5px 5px 0 rgba(216, 72, 47, 0.30)";
+    fill.style.boxShadow = "0 4px 4px 0 rgba(216, 72, 47, 0.30)";
   }
 
 
@@ -212,6 +212,7 @@ function dismissAnimation() {
     </svg>
     <header class="tablet-header">
       <div class="room-info">
+        <div class="room-icon-placeholder"></div>
         <h2 class="room-title">{{ room?.name ?? "Room" }}</h2>
         <p class="meta">Aktuelle Belegung</p>
       </div>
@@ -315,21 +316,34 @@ function dismissAnimation() {
   aspect-ratio: 1/1;
   left: 120px;
   top: 175px;
-  border-radius: 100px;
+  border-radius: 85px;
   background: #4EB0F1;
   box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset, 7px 8px 9.4px 0 rgba(56, 64, 201, 0.40);
 }
 
+.room-icon-placeholder {
+  position: relative;
+  align-self: center;
+  justify-self: center;
+  width: 190px;
+  height: 190px;
+  top: 25px;
+  border-radius: 120px;
+  background: lightgray;
+}
+
 .room-title {
   position: relative;
-  top: 80px;
+  top: 55px;
   text-align: center;
-  font-size: 2.5rem;
-  margin: 0 0 4px;
+  font-size: 2.1rem;
+  margin: 0 0 10px;
   color: #ffffff;
 }
 
 .meta {
+  position: relative;
+  bottom: 15px;
   margin: 0;
   color: #64748b;
   font-size: 1.1rem;
@@ -350,20 +364,20 @@ function dismissAnimation() {
   top: 60px;
   width: 314px;
   height: 55px;
-  border-radius: 36px;
+  border-radius: 20px;
   background: #FFFEFE;
   box-shadow: 5px 4px 4px 0 rgba(56, 64, 201, 0.50), 0 4px 4px 0 rgba(56, 64, 201, 0.25) inset;
 }
 
-.satusfill {
-  height: 46px;
-  width: null;
-  left: 13px;
+.statusfill {
+  align-self: flex-start;
+  position: relative;
+  top: 8px;
+  left: 8px;
+  height: 42px;
+  border-radius: 18px;
+  max-width: 306px;
 
-  border-radius: 36px;
-  background: linear-gradient(90deg, rgba(216, 72, 47, 0.60) 0.01%, rgba(102, 102, 102, 0.00) 99.98%), #F3EE4C;
-  background-blend-mode: hard-light, normal;
-  box-shadow: 0 4px 4px 0 rgba(216, 72, 47, 0.30);
 }
 
 .count {
@@ -473,7 +487,7 @@ function dismissAnimation() {
 .child-card {
   display: grid;
   align-items: center;
-
+  
   padding: 16px;
   border-radius: 20px;
   background: #ffffff;
@@ -516,7 +530,7 @@ function dismissAnimation() {
 }
 
 
-.avatar {
+.child-photo {
   width: 115px;
   height: 115px;
   border-radius: 18px;
@@ -529,10 +543,12 @@ function dismissAnimation() {
 
 }
 
-.avatar.placeholder {
+.child-photo.placeholder {
+  width: 115px !important;
+  height: 115px !important;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-self: center;
+  justify-self: center;
   background: #e2e8f0;
   color: #334155;
   font-weight: 700;

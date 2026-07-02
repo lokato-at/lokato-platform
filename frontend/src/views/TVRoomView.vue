@@ -40,17 +40,6 @@ function roomFillStyle(room: Room) {
   return { width: `${percentage}%` };
 }
 
-/* function statusBarUpdate(num: number) {
-  const statusBar = document.querySelector(".statusbar");
-  if (!statusBar) return;
-  const capacity = room.value?.capacity ?? 0;
-  const fill = statusBar.querySelector(".satusfill") as HTMLElement | null;
-  if (!fill) return;
-  const percentage = capacity > 0 ? Math.min((currentCount.value / capacity) * 100, 100) : 0;
-  fill.style.width = `${percentage}%`;
-
-
-} */
 
 function childInitials(name?: string) {
   if (!name) return "?";
@@ -134,7 +123,7 @@ onUnmounted(() => {
     <div v-else class="room-grid">
       <article v-for="room in filteredRooms" :key="room.id" class="room-card">
         <div class="room-header">
-          <div class="room-icon"></div>
+          <div class="room-icon-placeholder"></div>
             <div class="room-name">{{ room.name }}</div>
             <!-- <div class="room-area">{{ room.area ?? "Bereich nicht verfügbar" }}</div> -->
 
@@ -286,7 +275,7 @@ margin-bottom: 4px;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
   background: rgba(245, 245, 245, 0.80);
-  
+  padding: 20px;
   border-radius: 16px;
 }
 
@@ -301,11 +290,11 @@ margin-bottom: 4px;
 }
 
 .room-card {
-  max-width: 340px;
+  max-width: 320px;
   height: 175px;
   background: #ffffff;
   border-radius: 24px;
-  padding: 24px;
+  padding: 20px;
   
 }
 
@@ -362,14 +351,26 @@ box-shadow: 0 4px 4px 0 rgba(242, 113, 0, 0.40);
 .room-header {
   display: flex;
   justify-content: space-between;
+ 
   align-items: flex-start;
-  gap: 16px;
   margin-bottom: 18px;
+  height: 40px;
+}
+
+.room-icon-placeholder {
+  position: absolute;
+  display: flex;
+  align-self: flex-start;
+  padding: 10px;
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  background: lightgray;
 }
 
 .room-name {
   position: relative;
-  left: 40px;
+  left: 150px;
   top: 0px;
   font-size: 20px;
   font-weight: 600;
@@ -391,7 +392,7 @@ box-shadow: 0 4px 4px 0 rgba(242, 113, 0, 0.40);
   font-weight: 900;
   text-align: center;
   top: 70px;
-  right: 20px;
+  right: 25px;
 }
 
 .room-count::after {
@@ -430,30 +431,5 @@ box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25) inset;
   border: 2px solid rgba(0, 125, 83, 0.40);
   transition: width 0.25s ease;
 }
-/*
-.children {
-  display: grid;
-  gap: 12px;
-}
 
-.child-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
- */
-/* .child-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #0f172a;
-  font-weight: 700;
-} */
 </style>

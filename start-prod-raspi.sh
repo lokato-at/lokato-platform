@@ -327,16 +327,11 @@ configure_database() {
     sudo systemctl enable --now mariadb 2>/dev/null \
         || sudo systemctl enable --now mysql
 
-    # Deployte .env ist die Wahrheit ueber die DB-Credentials — uebernehmen, sonst
-    # laufen MariaDB-User-Pass und .env auseinander (migrate: "Access denied").
-    local deployed_env="$BACKEND_DEPLOY/.env"
-    if [[ -f "$deployed_env" ]]; then
-        local v
-        v="$(sudo sed -n 's/^DB_DATABASE=//p' "$deployed_env" | head -n1)"; [[ -n "$v" ]] && DB_NAME="$v"
-        v="$(sudo sed -n 's/^DB_USERNAME=//p' "$deployed_env" | head -n1)"; [[ -n "$v" ]] && DB_USER="$v"
-        v="$(sudo sed -n 's/^DB_PASSWORD=//p' "$deployed_env" | head -n1)"; [[ -n "$v" ]] && DB_PASSWORD="$v"
-        explain "Bestehende .env gefunden -> DB-Credentials daraus uebernommen (User '$DB_USER', DB '$DB_NAME')."
-    fi
+    # Die Deploy-.env ist die Wahrheit ueber die DB-Credentials — prepare_env hat
+    # sie angelegt und dir zum Editieren gegeben. Werte uebernehmen, sonst laufen
+    # MariaDB-User-Pass und .env auseinander (migrate: "Access denied").
+    load_deployed_env_values
+    explain "DB-Credentials aus der .env: User '$DB_USER', DB '$DB_NAME', Passwort $(mask "$DB_PASSWORD")."
 
     # User + Datenbank anlegen (idempotent ueber IF NOT EXISTS).
     # Zwei Host-Rows fuer denselben User, bewusst:
@@ -471,6 +466,71 @@ install_backend_env() {
     ok ".env gesetzt: DB_PASSWORD synchron mit MariaDB, APP_URL=http://$_ip"
 }
 
+# Liest die DB-Credentials aus einer vorhandenen Deploy-.env in die globalen
+# Variablen — sobald die .env existiert, ist SIE die Wahrheit (auch nach dem
+# Editieren durch den User).
+load_deployed_env_values() {
+    local f="$BACKEND_DEPLOY/.env" v
+    [[ -f "$f" ]] || return 0
+    v="$(sudo sed -n 's/^DB_DATABASE=//p' "$f" | head -n1)"; [[ -n "$v" ]] && DB_NAME="$v"
+    v="$(sudo sed -n 's/^DB_USERNAME=//p' "$f" | head -n1)"; [[ -n "$v" ]] && DB_USER="$v"
+    v="$(sudo sed -n 's/^DB_PASSWORD=//p' "$f" | head -n1)"; [[ -n "$v" ]] && DB_PASSWORD="$v"
+}
+
+# ----- 8b) .env vorbereiten — DEINE Chance, sie VOR dem DB-Setup anzupassen ---
+# Legt die Deploy-.env FRUEH aus dem Template an und laesst dich sie pruefen/
+# editieren, BEVOR DB-User + Migration darauf aufsetzen. So wird nie ein Default
+# (z.B. DB_PASSWORD=changeme) ungefragt in MariaDB einzementiert.
+prepare_env() {
+    step ".env vorbereiten — DEINE Chance, die Runtime-Config anzupassen"
+    local target="$BACKEND_DEPLOY/.env"
+
+    if [[ ! -f "$target" ]]; then
+        explain "Noch keine .env vorhanden — ich lege sie aus dem Pi-Template an."
+        install_backend_env
+    else
+        explain "Es existiert bereits eine .env: $target"
+        if confirm "Aus dem Template NEU erzeugen? (Backup wird angelegt; eigene Werte wie Passwort/IP gehen sonst verloren)" N; then
+            local bak="$target.bak.$(date +%Y%m%d-%H%M%S)"
+            sudo cp "$target" "$bak"
+            install_backend_env
+            ok "Alte .env gesichert unter $bak."
+        else
+            explain "Bestehende .env bleibt die Basis (du kannst sie gleich trotzdem anpassen)."
+        fi
+    fi
+
+    echo
+    explain "Runtime-Config liegt unter: $target"
+    explain "Pruefe v.a.:  DB_PASSWORD (wird GLEICH in MariaDB uebernommen), APP_URL,"
+    explain "              MQTT_* falls noetig. APP_KEY bleibt leer (wird generiert)."
+
+    if [[ "$ASSUME_YES" != "1" && -t 0 ]]; then
+        if confirm "Die .env JETZT im Editor oeffnen und anpassen?" Y; then
+            local ed="${EDITOR:-}"
+            if [[ -z "$ed" ]]; then
+                command -v nano >/dev/null 2>&1 && ed=nano
+                [[ -z "$ed" ]] && command -v vi >/dev/null 2>&1 && ed=vi
+            fi
+            if [[ -n "$ed" ]]; then
+                sudo "$ed" "$target"
+                ok "Editor geschlossen — ich uebernehme deine .env-Werte."
+            else
+                warn "Kein Editor gefunden. Bearbeite sie in einem ZWEITEN Terminal:  sudo nano $target"
+                confirm "Weiter, wenn du fertig bist?" Y || fail "Abgebrochen — .env in Ruhe anpassen, dann Skript erneut starten."
+            fi
+        else
+            explain "Ok, unveraendert. (Spaeter: sudo nano $target, dann Skript erneut laufen lassen.)"
+        fi
+    else
+        explain "Nicht-interaktiv (ASSUME_YES/kein TTY) — .env aus Template/Env-Vars, kein Editor-Stop."
+    fi
+
+    # Ab jetzt ist die (evtl. editierte) .env die Wahrheit fuer DB-Setup etc.
+    load_deployed_env_values
+    ok "Uebernommen: DB '$DB_NAME', User '$DB_USER', Passwort $(mask "$DB_PASSWORD"), fuer das gleich der MariaDB-User gesetzt wird."
+}
+
 # ----- 9) Backend deployen ---------------------------------------------------
 deploy_backend() {
     step "Backend deployen (Code syncen, vendor + Cache aufraeumen, migrieren)"
@@ -501,22 +561,10 @@ deploy_backend() {
         "$BACKEND_DEPLOY/storage/app/public/children" \
         "$BACKEND_DEPLOY/bootstrap/cache"
 
-    # --- .env: anlegen (fehlt) oder auf Wunsch neu erzeugen (mit Backup) -----
-    local env_target="$BACKEND_DEPLOY/.env"
-    if [[ ! -f "$env_target" ]]; then
-        explain "Noch keine .env im Deploy — ich lege sie aus dem Pi-Template an."
-        install_backend_env
-    else
-        explain "Es existiert bereits eine .env: $env_target (enthaelt deine Werte)."
-        if confirm "Diese .env aus dem Template NEU erzeugen? (Backup wird angelegt, eigene Werte wie Passwort/IP gehen sonst verloren)" N; then
-            local bak="$env_target.bak.$(date +%Y%m%d-%H%M%S)"
-            sudo cp "$env_target" "$bak"
-            install_backend_env
-            ok "Alte .env gesichert unter $bak."
-        else
-            explain "Bestehende .env bleibt unveraendert."
-        fi
-    fi
+    # .env wurde bereits in prepare_env angelegt + von dir geprueft (frueh, damit
+    # du sie VOR dem DB-Setup anpassen konntest). Sie ist vom rsync ausgenommen,
+    # bleibt also unangetastet. Hier nur absichern, dass sie da ist.
+    [[ -f "$BACKEND_DEPLOY/.env" ]] || fail "Deploy-.env fehlt ($BACKEND_DEPLOY/.env) — wurde prepare_env uebersprungen? Skript erneut starten."
 
     # --- Cache zuruecksetzen -------------------------------------------------
     # Stale bootstrap-cache loeschen, sonst 'BootServiceProvider not found', wenn
@@ -771,8 +819,10 @@ print_plan() {
     echo -e "        systemd -> Backend (vendor/Cache-Reset falls noetig, migrieren) -> Tools ->"
     echo -e "        Frontend-Build -> Cron -> Services -> Zusammenfassung."
     echo
-    echo -e "\033[32mSicher:\033[0m Bestehende .env und DB werden NICHT ohne Rueckfrage ueberschrieben."
-    echo -e "        Das Skript ist idempotent — du kannst es jederzeit erneut laufen lassen."
+    echo -e "\033[32mSicher:\033[0m Frueh im Ablauf (Schritt '.env vorbereiten') kannst du die Runtime-"
+    echo -e "        Config im Editor anpassen — u.a. DB_PASSWORD oben ($db_pw) — BEVOR sie"
+    echo -e "        in MariaDB uebernommen wird. Bestehende .env/DB werden nie ohne Ruck-"
+    echo -e "        frage ueberschrieben. Das Skript ist idempotent (jederzeit neu startbar)."
     echo
 }
 
@@ -855,13 +905,19 @@ info "Los geht's — bei einem Fehler sagt das Skript, was fehlt, und du kannst 
 preflight
 install_system_packages
 configure_network
+
+# Deploy-Verzeichnis + .env FRUEH: du siehst die Runtime-Config und kannst sie
+# anpassen, BEVOR DB-User + Migration darauf aufsetzen (kein Default wird un-
+# gefragt einzementiert).
+prepare_deploy_dirs
+prepare_env
+
 configure_database
 configure_mosquitto
 configure_nginx
 configure_php_fpm
 configure_systemd_mqtt
 
-prepare_deploy_dirs
 deploy_backend
 deploy_tools
 deploy_frontend

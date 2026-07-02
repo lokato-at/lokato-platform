@@ -234,12 +234,22 @@ configure_database() {
     fi
 
     # User + Datenbank anlegen (idempotent ueber IF NOT EXISTS).
+    # Zwei Host-Rows fuer denselben User, bewusst:
+    #   @localhost  -> Socket-Verbindungen (z.B. `mysql -h localhost` beim Debuggen)
+    #   @127.0.0.1  -> TCP. Laravel + MQTT-Subscriber verbinden per DB_HOST=127.0.0.1
+    #                  (TCP). @localhost matcht TCP nur ueber Reverse-DNS und bricht,
+    #                  sobald jemand `skip-name-resolve` aktiviert -> darum die IP
+    #                  explizit als eigene Row.
+    # Beide werden bei JEDEM Lauf auf dasselbe $DB_PASSWORD ge-ALTERt -> kein Drift.
     info "Datenbank \"$DB_NAME\" und User \"$DB_USER\" sicherstellen..."
     sudo mysql --protocol=socket <<SQL
 CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';
 ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+ALTER USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
@@ -439,10 +449,16 @@ deploy_backend() {
     _dh="$(sudo sed -n 's/^DB_HOST=//p'     "$BACKEND_DEPLOY/.env" | head -n1)"
     if ! mysql -h "${_dh:-127.0.0.1}" -u "$_du" -p"$_dp" \
             -e "USE \`$_dd\`; SELECT 1;" >/dev/null 2>&1; then
-        fail "DB-Login mit den .env-Credentials (User '$_du', DB '$_dd') fehlgeschlagen.
-       .env-DB_PASSWORD passt nicht zum MariaDB-User. Fix:
-         sudo mysql -e \"ALTER USER '$_du'@'localhost' IDENTIFIED BY '<.env-DB_PASSWORD>'; FLUSH PRIVILEGES;\"
-       oder DB_PASSWORD in $BACKEND_DEPLOY/.env angleichen, dann erneut starten."
+        fail "DB-Login mit den .env-Credentials (User '$_du', DB '$_dd', Host '${_dh:-127.0.0.1}') fehlgeschlagen.
+       Zwei moegliche Ursachen:
+       1) .env-DB_PASSWORD passt nicht zum MariaDB-User. Fix:
+            sudo mysql -e \"ALTER USER '$_du'@'localhost'  IDENTIFIED BY '<.env-DB_PASSWORD>';
+                            ALTER USER '$_du'@'127.0.0.1' IDENTIFIED BY '<.env-DB_PASSWORD>'; FLUSH PRIVILEGES;\"
+          oder DB_PASSWORD in $BACKEND_DEPLOY/.env angleichen, dann erneut starten.
+       2) Host-Matching: der User existiert nur als '@localhost', aber Laravel
+          verbindet per TCP (DB_HOST=127.0.0.1). Bei aktivem 'skip-name-resolve'
+          matcht '@localhost' TCP nicht. Fix: obige '@127.0.0.1'-Row anlegen
+          (macht dieses Skript in configure_database bereits) oder Skript erneut laufen lassen."
     fi
     ok "DB-Login ok (.env <-> MariaDB konsistent)."
 

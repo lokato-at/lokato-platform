@@ -10,8 +10,7 @@ Backend-spezifische Quick-Reference. Für Setup-Anleitungen (Dev/Prod) bitte das
 app/
 ├── Console/Commands/
 │   ├── MqttSubscribeCommand.php      MQTT-Listener; ruft ScanIngestService
-│   ├── DailyActiveResetCommand.php   Setzt children.is_active=0 (Cron)
-│   └── MqttScanListener.php          Legacy-Debug-Command (nicht produktiv)
+│   └── DailyActiveResetCommand.php   Setzt children.is_active=0 (Cron)
 ├── Http/Controllers/Api/
 │   ├── SseStreamController.php       Einziger SSE-Endpoint /api/stream
 │   ├── DeviceEventController.php     REST-Scan-Fallback /api/v1/scan

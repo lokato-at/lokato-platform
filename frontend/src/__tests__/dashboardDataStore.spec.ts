@@ -54,8 +54,8 @@ describe('dashboardDataStore.handleOccupancyUpdate', () => {
     })
 
     expect(store.occupancy[3]).toBeDefined()
-    expect(store.occupancy[3].current_count).toBe(4)
-    expect(store.occupancy[3].children).toHaveLength(1)
+    expect(store.occupancy[3]!.current_count).toBe(4)
+    expect(store.occupancy[3]!.children).toHaveLength(1)
   })
 
   it('falls back to children.length when current_count is omitted', () => {
@@ -70,7 +70,7 @@ describe('dashboardDataStore.handleOccupancyUpdate', () => {
       ],
     })
 
-    expect(store.occupancy[1].current_count).toBe(2)
+    expect(store.occupancy[1]!.current_count).toBe(2)
   })
 })
 

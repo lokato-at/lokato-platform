@@ -70,17 +70,22 @@ as_www_data() {
         "$@"
 }
 
+# Legt $target aus $example an, falls es noch nicht existiert.
+# Rueckgabe: 0 = frisch angelegt, 1 = existierte bereits (wird NICHT angefasst).
+# Wichtig: Aufrufer MUESSEN den Rueckgabewert behandeln (if / || true), sonst
+# bricht `set -e` bei "existiert bereits" (return 1) das Skript ab.
 ensure_file_from_example() {
     local target="$1"
     local example="$2"
     if [[ -f "$target" ]]; then
-        return
+        return 1
     fi
     if [[ ! -f "$example" ]]; then
         fail "Template fehlt: $example"
     fi
     sudo cp "$example" "$target"
     ok "$(basename "$target") aus $(basename "$example") angelegt."
+    return 0
 }
 
 # ----- Vorbedingungen --------------------------------------------------------
@@ -177,6 +182,19 @@ configure_database() {
     info "MariaDB starten..."
     sudo systemctl enable --now mariadb 2>/dev/null \
         || sudo systemctl enable --now mysql
+
+    # Wenn schon eine deployte .env existiert, ist SIE die Wahrheit ueber die
+    # DB-Credentials. Uebernimm sie, damit der MariaDB-User auf exakt das
+    # Passwort gesetzt wird, das auch in der .env steht — sonst laufen beide
+    # auseinander und `migrate` scheitert mit "Access denied for user".
+    local deployed_env="$BACKEND_DEPLOY/.env"
+    if [[ -f "$deployed_env" ]]; then
+        local v
+        v="$(sudo sed -n 's/^DB_DATABASE=//p' "$deployed_env" | head -n1)"; [[ -n "$v" ]] && DB_NAME="$v"
+        v="$(sudo sed -n 's/^DB_USERNAME=//p' "$deployed_env" | head -n1)"; [[ -n "$v" ]] && DB_USER="$v"
+        v="$(sudo sed -n 's/^DB_PASSWORD=//p' "$deployed_env" | head -n1)"; [[ -n "$v" ]] && DB_PASSWORD="$v"
+        info "Bestehende .env gefunden — DB-Credentials daraus uebernommen (User '$DB_USER', DB '$DB_NAME')."
+    fi
 
     # User + Datenbank anlegen (idempotent ueber IF NOT EXISTS).
     info "Datenbank \"$DB_NAME\" und User \"$DB_USER\" sicherstellen..."
@@ -311,8 +329,21 @@ deploy_backend() {
         "$BACKEND_DEPLOY/storage/app/public/children" \
         "$BACKEND_DEPLOY/bootstrap/cache"
 
-    # .env aus Pi-Template, wenn noch keine da ist.
-    ensure_file_from_example "$BACKEND_DEPLOY/.env" "$BACKEND_SRC/.env.raspi.example"
+    # .env aus Pi-Template, wenn noch keine da ist. Bei FRISCHER .env die
+    # Runtime-Werte hineinspiegeln: DB_PASSWORD (sonst Drift zum MariaDB-User,
+    # siehe configure_database) und APP_URL (echte Pi-IP). Eine bereits
+    # vorhandene .env wird oben gar nicht erst angefasst.
+    if ensure_file_from_example "$BACKEND_DEPLOY/.env" "$BACKEND_SRC/.env.raspi.example"; then
+        local _ip _pw_esc
+        _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        [[ -z "$_ip" ]] && _ip="$PI_IP"
+        # sed-Sonderzeichen im Passwort escapen (\ / & |), damit der Wert
+        # buchstabengetreu landet.
+        _pw_esc="$(printf '%s' "$DB_PASSWORD" | sed -e 's/[\\/&|]/\\&/g')"
+        sudo sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$_pw_esc|" "$BACKEND_DEPLOY/.env"
+        sudo sed -i "s|^APP_URL=.*|APP_URL=http://$_ip|" "$BACKEND_DEPLOY/.env"
+        ok ".env-Runtime-Werte gesetzt (DB_PASSWORD synchron mit MariaDB, APP_URL=http://$_ip)."
+    fi
 
     # Stale bootstrap-cache loeschen, sonst landet 'BoostServiceProvider not
     # found' im Image, wenn das Cache-File noch dev-Pakete referenziert.
@@ -371,7 +402,9 @@ deploy_tools() {
 deploy_frontend() {
     info "Frontend bauen ($FRONTEND_SRC)..."
     # .env-Pi-Template sicherstellen — der Build liest daraus VITE_API_BASE_URL.
-    ensure_file_from_example "$FRONTEND_SRC/.env" "$FRONTEND_SRC/.env.raspi.example"
+    # `|| true`, weil ensure_file_from_example bei vorhandener .env 1 zurueckgibt
+    # und das unter `set -e` sonst abbrechen wuerde.
+    ensure_file_from_example "$FRONTEND_SRC/.env" "$FRONTEND_SRC/.env.raspi.example" || true
 
     pushd "$FRONTEND_SRC" >/dev/null
     if [[ -f package-lock.json ]]; then

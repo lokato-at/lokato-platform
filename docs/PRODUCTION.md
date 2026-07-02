@@ -17,34 +17,36 @@ Pi nativ (kein Docker). `start-prod-raspi.sh` ist idempotent und macht das kompl
 git clone https://github.com/lokato-at/lokato-platform.git /home/pi/lokato-platform
 cd /home/pi/lokato-platform
 
-# Konfiguration anpassen (Default-Pi-IP 192.168.1.100)
-export PI_IP=192.168.1.100
-export PI_GATEWAY=192.168.1.1
-export DB_PASSWORD="ein-starkes-passwort"
+chmod +x *.sh
 
-# Optional: Mail-Alarmierung bei Audit-Anomalien
-export ALERT_EMAIL="dein.name@example.com"
+# (Einmalig) statische IP setzen — separates Skript, kann SSH kurz kappen:
+PI_IP=192.168.1.100 ./setup-network-raspi.sh
 
-chmod +x start-prod-raspi.sh stop-prod-raspi.sh
-./start-prod-raspi.sh
+# Deploy — zeigt am Anfang alle Optionen, lässt dich die .env editieren,
+# bevor DB + Migration darauf aufsetzen. Idempotent.
+DB_PASSWORD="ein-starkes-passwort" \
+  SEED_ADMIN=1 ADMIN_USER_PASSWORD="admin-passwort" \
+  SEED_MASTERDATA=1 \
+  ./start-prod-raspi.sh
 ```
 
-Das Skript ist idempotent — mehrfache Läufe sind sicher.
+Nützliche Flags/Vars: `INSTALL_DEPS=0` (apt überspringen), `SETUP_LOG_AUDIT=0` (Log-Audit weglassen), `-y` (keine Rückfragen), `RESET_ENV=1` (bestehende `.env` aus Template neu). Das Skript ist idempotent — mehrfache Läufe sind sicher.
 
 ## Was das Skript macht (in dieser Reihenfolge)
 
-1. `apt install` — nginx, php-fpm, default-mysql-server (MariaDB), mosquitto, nodejs, composer, rsync
-2. **Statische IP** — Auto-Detect zwischen NetworkManager (nmcli) und dhcpcd
-3. **MariaDB** — User + Datenbank + Schema-Import aus `docker/sql/init/01_schema.sql`
-4. **Mosquitto** — Config aus `docker/mosquitto/config/` nach `/etc/mosquitto/conf.d/lokato.conf`
-5. **nginx** — vhost aus `docker/nginx/prod.conf` nach `/etc/nginx/sites-available/lokato`, Default-Site disabled
-6. **php-fpm** — Pool aus `docker/php-fpm/lokato-pool.conf` nach `/etc/php/X.Y/fpm/pool.d/`, Default-www-Pool nach `.disabled` verschoben
-7. **systemd-Unit** für `lokato-mqtt` aus `docker/systemd/lokato-mqtt.service`
-8. **Backend deployen** nach `/var/www/lokato/backend/` via rsync, dann `composer install --no-dev`, `key:generate`, `migrate --force`, `config:cache`, `route:cache`, `view:cache`
-9. **Frontend bauen** (`npm ci && npm run build`), dist nach `/var/www/lokato/frontend/dist/`
-10. **Tools deployen** (`tools/log_audit/` nach `/var/www/lokato/tools/`)
-11. **Cron-Jobs** für `www-data` (Laravel-Scheduler + Log-Audit, siehe `CRON.md`)
-12. **Reload + Restart** aller Services
+Am Anfang zeigt es eine **Options-Übersicht** und fragt nach Bestätigung.
+
+1. **Preflight** — Repo-Vollständigkeit, richtiger Ort, freier Platz
+2. **apt install** — nginx, php-fpm, MariaDB, mosquitto, nodejs, composer, rsync (`INSTALL_DEPS=0` überspringt)
+3. **.env-Review** — legt `/var/www/lokato/backend/.env` aus dem Template an und lässt dich sie **editieren** (DB_PASSWORD, APP_URL …), **bevor** die DB darauf aufsetzt. Eine bestehende `.env` wird **nie ohne Zustimmung** überschrieben (nur bei interaktivem Ja oder `RESET_ENV=1`, dann mit Backup).
+4. **MariaDB** — DB + User (`@localhost` **und** `@127.0.0.1`), Passwort aus der `.env`. Schema baut ausschließlich `migrate` (kein SQL-Import).
+5. **Mosquitto / nginx / php-fpm / systemd-Unit** — Configs aus `docker/…` installieren
+6. **Backend deployen** — rsync (vendor/.env ausgenommen), vendor/Cache-Reset falls nötig, `composer install --no-dev`, `key:generate` (nur wenn leer), **DB-Login-Test**, `migrate --force`, `config/route/view:cache`, optional Seeding (`SEED_ADMIN` / `SEED_MASTERDATA`)
+7. **Frontend bauen** (`npm ci && npm run build`) → `/var/www/lokato/frontend/dist/`
+8. **Log-Audit-Tool** (nur `SETUP_LOG_AUDIT=1`) + **Cron** (Laravel-Scheduler immer; Log-Audit-Jobs nur bei `SETUP_LOG_AUDIT=1`)
+9. **Reload + Restart** aller Services
+
+> **Statische IP** ist **nicht** Teil davon (Einmal-Setup, kann SSH kurz kappen) — separates Skript: `PI_IP=192.168.1.100 ./setup-network-raspi.sh`.
 
 Am Ende: Summary-Box mit echter Pi-IP und Bookmark-URLs.
 
@@ -68,16 +70,18 @@ Erwartete Ausgaben:
 
 ## Admin-User für Erststart
 
-`start-prod-raspi.sh` seedet **bewusst nicht** — Prod darf keine Default-Credentials anlegen. Nach dem ersten Setup muss der Admin-User manuell erzeugt werden, sonst sind `/api/v1/admin/*` und damit der Admin-Bereich im Frontend nicht erreichbar.
+Ohne User ist `/admin` leer (`/api/v1/admin/*` nicht erreichbar). Standardmäßig seedet das Skript **keinen** User — außer du gibst `SEED_ADMIN=1`. Beide Wege unten laufen über den **Seeder**; **kein `tinker`** (auf dem Pi läuft PsySH headless nicht zuverlässig — PsySH kann nicht nach `$HOME` schreiben, siehe TROUBLESHOOTING.md).
 
-### Variante A: Tinker (einmalig, beliebige Credentials)
+### Variante A: beim Deploy automatisch (empfohlen)
 
 ```bash
-sudo -u www-data php /var/www/lokato/backend/artisan tinker --execute \
-  "App\\Models\\User::create(['name' => 'Admin', 'email' => 'admin@hort.local', 'password' => bcrypt('DEIN_PASSWORT')]);"
+SEED_ADMIN=1 ADMIN_USER_EMAIL=admin@hort.local ADMIN_USER_PASSWORD='DEIN_PASSWORT' \
+  ./start-prod-raspi.sh
 ```
 
-### Variante B: AdminUserSeeder mit Env-Vars (idempotent)
+`SEED_ADMIN=1` ruft am Ende den `AdminUserSeeder` (idempotent, `updateOrCreate` auf der E-Mail). Ohne `ADMIN_USER_PASSWORD` generiert der Seeder eins und druckt es ins Log.
+
+### Variante B: AdminUserSeeder manuell (idempotent)
 
 Der `AdminUserSeeder` liest `ADMIN_USER_EMAIL` und `ADMIN_USER_PASSWORD` aus dem Environment und macht `updateOrCreate` auf der E-Mail — d.h. mehrfaches Ausführen ist sicher (User bleibt, Passwort wird auf das aktuelle env-Var gesetzt).
 
@@ -102,12 +106,7 @@ Erwartet: JSON-Response mit `token` und `user`-Block.
 
 ### Passwort später ändern
 
-```bash
-sudo -u www-data php /var/www/lokato/backend/artisan tinker --execute \
-  "\$u = App\\Models\\User::where('email','admin@hort.local')->first(); \$u->password = bcrypt('NEUES_PASSWORT'); \$u->save();"
-```
-
-Oder einfach Variante B mit anderen Env-Vars erneut ausführen.
+Variante A oder B mit anderen Env-Vars erneut ausführen — `updateOrCreate` setzt das Passwort für die E-Mail neu. Kein `tinker` nötig.
 
 ## Stammdaten beim Erststart (Räume + Devices)
 
@@ -156,6 +155,7 @@ Erwartet: Liste der Räume, occupancy → 200. Danach lädt `/#/tablet/1`. (`bas
 | Was | Befehl |
 |---|---|
 | Setup ausführen | `./start-prod-raspi.sh` |
+| Statische IP setzen (einmalig) | `PI_IP=192.168.1.100 ./setup-network-raspi.sh` |
 | MQTT stoppen | `./stop-prod-raspi.sh` |
 | Alles stoppen | `./stop-prod-raspi.sh --full` |
 | Service-Status (alle) | `systemctl status nginx php8.2-fpm mariadb mosquitto lokato-mqtt` |

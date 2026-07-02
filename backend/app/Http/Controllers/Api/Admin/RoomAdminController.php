@@ -20,7 +20,7 @@ class RoomAdminController extends Controller
     public function index(): JsonResponse
     {
         $rooms = Room::query()
-            ->select(['id', 'name', 'area', 'capacity', 'tolerance', 'is_active'])
+            ->select(['id', 'name', 'area', 'icon', 'capacity', 'tolerance', 'is_active'])
             ->orderBy('name')
             ->get();
 

@@ -4,6 +4,7 @@ import { useAdminDataStore } from "@/stores/adminDataStore";
 import type { AdminRoom } from "@/stores/adminDataStore";
 import { useToast } from "@/composables/useToast";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
+import { ROOM_ICONS, roomIconUrl } from "@/constants/roomIcons";
 
 type ActiveFilter = "all" | "active" | "inactive";
 
@@ -30,6 +31,7 @@ const pendingDeleteDeviceCount = computed(() => {
 const form = reactive({
   name: "",
   area: "",
+  icon: "",
   capacity: "",
   tolerance: "",
   is_active: true,
@@ -71,6 +73,7 @@ function resetForm() {
   editingId.value = null;
   form.name = "";
   form.area = "";
+  form.icon = "";
   form.capacity = "";
   form.tolerance = "";
   form.is_active = true;
@@ -80,6 +83,7 @@ async function openEdit(room: AdminRoom) {
   editingId.value = room.id;
   form.name = room.name ?? "";
   form.area = room.area ?? "";
+  form.icon = room.icon ?? "";
   form.capacity = room.capacity == null ? "" : String(room.capacity);
   form.tolerance = room.tolerance == null ? "" : String(room.tolerance);
   form.is_active = room.is_active ?? true;
@@ -93,6 +97,7 @@ function buildPayload() {
   const payload: Partial<AdminRoom> = {
     name: form.name.trim(),
     area: form.area.trim() || null,
+    icon: form.icon || null,
     is_active: supportsIsActive.value || editingId.value ? form.is_active : undefined,
   };
 
@@ -183,6 +188,32 @@ onUnmounted(() => {
           Raum aktiv
         </label>
 
+        <div class="icon-picker">
+          <span class="icon-picker-label">Bild fürs Tablet (optional)</span>
+          <div class="icon-grid">
+            <button
+              type="button"
+              class="icon-option"
+              :class="{ selected: !form.icon }"
+              title="Kein Bild"
+              @click="form.icon = ''"
+            >
+              <span class="icon-none">–</span>
+            </button>
+            <button
+              v-for="opt in ROOM_ICONS"
+              :key="opt.file"
+              type="button"
+              class="icon-option"
+              :class="{ selected: form.icon === opt.file }"
+              :title="opt.label"
+              @click="form.icon = opt.file"
+            >
+              <img :src="roomIconUrl(opt.file) ?? ''" :alt="opt.label" />
+            </button>
+          </div>
+        </div>
+
         <div class="form-actions">
           <button class="primary-btn" type="submit">{{ editingId ? "Speichern" : "Raum erstellen" }}</button>
           <button v-if="editingId" type="button" class="secondary-btn" @click="resetForm">Abbrechen</button>
@@ -256,6 +287,33 @@ onUnmounted(() => {
 @import '../styles/admin-shared.css';
 
 .toolbar { grid-template-columns: minmax(180px, 1fr) auto; }
+
+/* ----- Raum-Bild-Auswahl ----- */
+.icon-picker { grid-column: 1 / -1; display: grid; gap: 8px; }
+.icon-picker-label { font-size: 0.9rem; color: #475569; font-weight: 600; }
+.icon-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.icon-option {
+  width: 56px;
+  height: 56px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.icon-option:hover { transform: translateY(-1px); }
+.icon-option.selected {
+  border-color: #2a7cd9;
+  box-shadow: 0 0 0 3px rgba(42, 124, 217, 0.18);
+}
+.icon-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.icon-none { color: #94a3b8; font-size: 1.5rem; line-height: 1; }
+
 .room-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .room-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border: 1px solid #e6edf3; border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 @media (max-width: 820px) {

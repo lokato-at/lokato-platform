@@ -15,6 +15,7 @@ export interface Room {
     id: number;
     name: string;
     area?: string | null;
+    icon?: string | null;
     capacity?: number;
     tolerance?: number;
     status?: {

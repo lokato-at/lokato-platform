@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { useRoomTabletStore } from "@/stores/roomTabletStore";
 import { useBranding } from "@/composables/useBranding";
 import ChildPhoto from "@/components/ChildPhoto.vue";
+import { roomIconUrl } from "@/constants/roomIcons";
 
 const store = useRoomTabletStore();
 const route = useRoute();
@@ -18,6 +19,7 @@ const roomId = computed(() => {
 });
 
 const room = computed(() => store.snapshot.room);
+const roomIconSrc = computed(() => roomIconUrl(room.value?.icon));
 const children = computed(() => store.snapshot.children ?? []);
 const currentCount = computed(() => store.snapshot.current_count ?? children.value.length);
 
@@ -213,7 +215,8 @@ function dismissAnimation() {
     </svg>
     <header class="tablet-header">
       <div class="room-info">
-        <div class="room-icon-placeholder"></div>
+        <img v-if="roomIconSrc" :src="roomIconSrc" class="room-icon-img" alt="" />
+        <div v-else class="room-icon-placeholder"></div>
         <h2 class="room-title">{{ room?.name ?? "Room" }}</h2>
         <p class="meta">Aktuelle Belegung</p>
       </div>
@@ -320,17 +323,30 @@ function dismissAnimation() {
   border-radius: 85px;
   background: #4EB0F1;
   box-shadow: 0 4px 4px 0 rgba(56, 64, 201, 0.40) inset, 7px 8px 9.4px 0 rgba(56, 64, 201, 0.40);
+  /* Kinder (Bild/Platzhalter, Titel, Meta) immer horizontal zentrieren. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.room-icon-placeholder {
+.room-icon-placeholder,
+.room-icon-img {
   position: relative;
-  align-self: center;
-  justify-self: center;
   width: 190px;
   height: 190px;
   top: 25px;
   border-radius: 120px;
+  flex-shrink: 0;
+}
+
+.room-icon-placeholder {
   background: lightgray;
+}
+
+/* Gewaehltes Raum-Bild ersetzt den Platzhalter, auf Kreisgroesse skaliert. */
+.room-icon-img {
+  object-fit: cover;
+  background: #fff;
 }
 
 .room-title {

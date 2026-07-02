@@ -13,6 +13,7 @@ export interface AdminRoom {
   id: number;
   name: string;
   area?: string | null;
+  icon?: string | null;
   capacity?: number;
   tolerance?: number;
   current_count?: number;

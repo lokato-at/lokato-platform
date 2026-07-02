@@ -16,6 +16,7 @@ class RoomUpdateRequest extends FormRequest
         return [
             'name'      => ['sometimes', 'required', 'string', 'max:100'],
             'area'      => ['sometimes', 'nullable', 'string', 'max:50'],
+            'icon'      => ['sometimes', 'nullable', 'string', 'max:100'],
             'capacity'  => ['sometimes', 'required', 'integer', 'min:0'],
             'tolerance' => ['sometimes', 'integer', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],

@@ -255,7 +255,7 @@ class SseStreamController extends Controller
         }
 
         $roomQuery = Room::query()
-            ->select(['id', 'name', 'area', 'capacity', 'tolerance', 'is_active', 'updated_at'])
+            ->select(['id', 'name', 'area', 'icon', 'capacity', 'tolerance', 'is_active', 'updated_at'])
             ->where('updated_at', '>', $lastRoomChangeAt)
             ->orderBy('updated_at')
             ->limit(50);
@@ -276,6 +276,7 @@ class SseStreamController extends Controller
                 'id' => $room->id,
                 'name' => $room->name,
                 'area' => $room->area,
+                'icon' => $room->icon,
                 'capacity' => $room->capacity,
                 'tolerance' => $room->tolerance,
                 'is_active' => (bool) $room->is_active,

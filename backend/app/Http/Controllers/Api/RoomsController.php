@@ -75,6 +75,8 @@ class RoomsController extends Controller
                 'id' => $room->id,
                 'name' => $room->name,
                 'area' => $room->area,
+                // icon: Bild fuer die Tablet-Ansicht (ersetzt den Platzhalter).
+                'icon' => $room->icon,
                 'capacity' => $room->capacity,
                 'tolerance' => $room->tolerance,
                 // Tablet-View braucht is_active fuer den "Raum geschlossen"-Banner.

@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\Child\ChildUpdateRequest;
 use App\Models\Child;
 use App\Models\ChildLocation;
 use App\Models\MovementLog;
+use App\Services\TrackerSightingService;
 use App\Support\SseChangeSignal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class ChildAdminController extends Controller
 {
     public function __construct(
         private readonly SseChangeSignal $sseChangeSignal,
+        private readonly TrackerSightingService $trackerSightings,
     ) {
     }
 
@@ -34,6 +36,10 @@ class ChildAdminController extends Controller
     public function store(ChildStoreRequest $request): JsonResponse
     {
         $child = Child::create($request->validated());
+
+        // Wurde direkt mit Tracker angelegt: offene Sichtung aus dem
+        // Anlern-Modus entfernen, damit sie dort nicht weiter auftaucht.
+        $this->trackerSightings->forget($child->tracker_uid);
 
         $this->sseChangeSignal->bumpChildren();
 
@@ -73,6 +79,9 @@ class ChildAdminController extends Controller
                 }
             }
         });
+
+        // Tracker gerade zugewiesen -> Sichtung aus dem Anlern-Modus raeumen.
+        $this->trackerSightings->forget($child->tracker_uid);
 
         $this->sseChangeSignal->bump();
 

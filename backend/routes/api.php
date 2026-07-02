@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\ChildAdminController;
 use App\Http\Controllers\Api\Admin\DeviceAdminController;
 use App\Http\Controllers\Api\Admin\RoomAdminController;
 use App\Http\Controllers\Api\Admin\AdminSummaryController;
+use App\Http\Controllers\Api\Admin\TrackerSightingController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChildrenController;
 use App\Http\Controllers\Api\DeviceEventController;
@@ -63,6 +64,11 @@ Route::prefix('v1')->group(function () {
 
         // /api/v1/admin/devices
         Route::apiResource('devices', DeviceAdminController::class);
+
+        // /api/v1/admin/tracker-sightings — Anlern-Modus: gescannte, noch nicht
+        // zugewiesene Tracker-UIDs (Polling durch die Kinder-Admin-View).
+        Route::get('tracker-sightings', [TrackerSightingController::class, 'index']);
+        Route::delete('tracker-sightings/{trackerUid}', [TrackerSightingController::class, 'destroy']);
     });
 });
 

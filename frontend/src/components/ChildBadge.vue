@@ -7,26 +7,17 @@ const props = defineProps<{
   size?: 'sm' | 'md' | 'lg'
 }>()
 
-// Foto-Auswahl in dieser Reihenfolge:
-//   1) /branding/children/<child-id>.jpg          (Convention, manuell abgelegt)
-//   2) child.photo_url                            (falls in DB gesetzt)
-//   3) Initial-Placeholder
+// Foto-Auswahl:
+//   1) child.photo_url  (vom Admin via Upload gesetzt → /storage/children/…)
+//   2) Initial-Placeholder
 //
-// Bei 404 auf #1 fällt das <img> automatisch auf die nächste Quelle.
-// Tipp im branding/README.md: legt die Bilder als z.B. "1.jpg", "2.jpg" ab —
-// die child.id ist die stabile ID, die im Admin-Bereich angezeigt wird.
+// Der frühere Convention-Fallback /branding/children/<id>.jpg wurde entfernt:
+// er löste pro Kind ohne hinterlegtes Foto einen 404 aus (Konsolen-Flut), weil
+// die Datei praktisch nie existiert. Ohne photo_url zeigen wir direkt die
+// Initiale — ohne Netzwerk-Request.
 
 const candidates = computed<string[]>(() => {
-  const list: string[] = []
-  // 1) DB-photo_url (vom Admin via Upload gesetzt)
-  if (props.child.photo_url) {
-    list.push(props.child.photo_url)
-  }
-  // 2) Convention-Fallback: manuell abgelegte Datei
-  if (props.child.id != null) {
-    list.push(`/branding/children/${props.child.id}.jpg`)
-  }
-  return list
+  return props.child.photo_url ? [props.child.photo_url] : []
 })
 
 const currentIndex = ref(0)

@@ -35,6 +35,10 @@ class ScanIngestService
             $child = Child::query()->select(['id', 'tracker_uid', 'is_active'])->where('tracker_uid', $trackerUid)->lockForUpdate()->first();
             if (! $child) {
                 AppLogger::event('scan', 'scan_child_not_found', ['tracker_uid' => $trackerUid], 'warning');
+                // Unbekannten Tracker fuer den Admin-Anlern-Modus festhalten
+                // (UID + Zeit + Geraet/Raum). Einziger eindeutiger Choke-Point,
+                // deckt MQTT und REST in einem ab. Erfolgs-/Move-Pfad unberuehrt.
+                app(TrackerSightingService::class)->record($trackerUid, $device);
                 return null;
             }
 

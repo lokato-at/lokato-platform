@@ -222,12 +222,63 @@ async function confirmDelete() {
   deleteBusy.value = false;
 }
 
+// ----- Anlern-Modus: eingehende, noch keinem Kind zugewiesene Tracker-UIDs -----
+const learnMode = ref(false);
+const LEARN_POLL_MS = 1500;
+let learnTimer: ReturnType<typeof setInterval> | null = null;
+// nowTick treibt die "vor X s"-Anzeige an (reaktive Zeitbasis).
+const nowTick = ref(Date.now());
+
+function startLearnPolling() {
+  void store.loadTrackerSightings();
+  learnTimer = setInterval(() => {
+    nowTick.value = Date.now();
+    void store.loadTrackerSightings();
+  }, LEARN_POLL_MS);
+}
+
+function stopLearnPolling() {
+  if (learnTimer) {
+    clearInterval(learnTimer);
+    learnTimer = null;
+  }
+}
+
+function toggleLearnMode() {
+  learnMode.value = !learnMode.value;
+  if (learnMode.value) startLearnPolling();
+  else stopLearnPolling();
+}
+
+function formatSeen(iso?: string | null): string {
+  if (!iso) return "";
+  const secs = Math.max(0, Math.round((nowTick.value - new Date(iso).getTime()) / 1000));
+  if (secs < 60) return `vor ${secs} s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `vor ${mins} min`;
+  return `vor ${Math.floor(mins / 60)} h`;
+}
+
+async function applySighting(uid: string) {
+  // In den gerade offenen Formular-Modus übernehmen (Bearbeiten oder Neu).
+  if (editingId.value) editForm.tracker_uid = uid;
+  else createForm.tracker_uid = uid;
+  await nextTick();
+  formCardRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  nameInputRef.value?.focus();
+}
+
+function dismissSighting(uid: string) {
+  void store.dismissTrackerSighting(uid);
+}
+
 onMounted(() => {
   store.loadChildren();
   store.connectSSE();
 });
 
 onUnmounted(() => {
+  stopLearnPolling();
   store.disconnectSSE();
   if (pickedPhotoPreviewUrl.value) {
     URL.revokeObjectURL(pickedPhotoPreviewUrl.value);
@@ -242,7 +293,48 @@ onUnmounted(() => {
         <h2>Kinder</h2>
         <p class="muted">Suche, Statusfilter und schnelles Erstellen/Bearbeiten.</p>
       </div>
+      <button
+        type="button"
+        class="learn-toggle"
+        :class="{ active: learnMode }"
+        @click="toggleLearnMode"
+      >
+        {{ learnMode ? "● Anlern-Modus beenden" : "Anlern-Modus starten" }}
+      </button>
     </header>
+
+    <section v-if="learnMode" class="learn-panel">
+      <div class="learn-head">
+        <h3>Eingehende Tracker</h3>
+        <span class="learn-hint">
+          Halte einen neuen Tracker an einen Scanner — er läuft hier live auf. Angezeigt werden
+          nur UIDs, die noch keinem Kind gehören.
+        </span>
+      </div>
+
+      <p v-if="!store.trackerSightings.length" class="learn-empty">
+        Warte auf Scans…
+      </p>
+
+      <ul v-else class="learn-list">
+        <li v-for="s in store.trackerSightings" :key="s.tracker_uid" class="learn-item">
+          <div class="learn-main">
+            <code class="learn-uid">{{ s.tracker_uid }}</code>
+            <span class="learn-meta">
+              {{ s.room_name || s.device_name || "Unbekanntes Gerät" }} · {{ formatSeen(s.last_seen_at) }}
+            </span>
+          </div>
+          <div class="learn-actions">
+            <button type="button" class="primary-btn small-btn" @click="applySighting(s.tracker_uid)">
+              Übernehmen
+            </button>
+            <button type="button" class="secondary-btn small-btn" @click="dismissSighting(s.tracker_uid)">
+              Verwerfen
+            </button>
+          </div>
+        </li>
+      </ul>
+    </section>
 
     <p v-if="store.error" class="error">{{ store.error }}</p>
 
@@ -271,6 +363,7 @@ onUnmounted(() => {
         </template>
         <template v-else>
           <input
+            ref="nameInputRef"
             v-model="createForm.name"
             type="text"
             class="input"
@@ -495,4 +588,59 @@ onUnmounted(() => {
   text-align: center;
   gap: 0.75rem;
 }
+
+/* ----- Anlern-Modus ----- */
+.learn-toggle {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid #2a7cd9;
+  background: #fff;
+  color: #2a7cd9;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.learn-toggle:hover { background: #eff6ff; }
+.learn-toggle.active {
+  background: #2a7cd9;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(42, 124, 217, 0.18);
+}
+
+.learn-panel {
+  border: 1px solid #bfdbfe;
+  background: #f0f7ff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+.learn-head { display: grid; gap: 2px; }
+.learn-head h3 { margin: 0; font-size: 1.05rem; }
+.learn-hint { color: #475569; font-size: 0.85rem; }
+.learn-empty { margin: 0; color: #64748b; font-style: italic; padding: 8px 0; }
+.learn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.learn-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.learn-main { display: grid; gap: 3px; min-width: 0; }
+.learn-uid {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-all;
+}
+.learn-meta { font-size: 0.8rem; color: #64748b; }
+.learn-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>

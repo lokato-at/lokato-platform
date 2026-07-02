@@ -41,7 +41,29 @@ export interface AdminSummary {
   devices_count: number;
 }
 
+// Anlern-Modus: eine gescannte, noch keinem Kind zugewiesene Tracker-UID.
+export interface TrackerSighting {
+  tracker_uid: string;
+  device_id?: number | null;
+  device_name?: string | null;
+  room_id?: number | null;
+  room_name?: string | null;
+  last_seen_at?: string | null;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Laravel-422 liefert { message, errors: { feld: [msg] } }. Fuer Konflikte wie
+// "Tracker gehört bereits zu Kind X" wollen wir die feld-spezifische Meldung
+// statt eines generischen Fallbacks anzeigen.
+const extractApiMessage = (err: unknown, fallback: string): string => {
+  const axiosErr = err as
+    | AxiosError<{ message?: string; errors?: Record<string, string[]> }>
+    | undefined;
+  const data = axiosErr?.response?.data;
+  const firstFieldError = data?.errors ? Object.values(data.errors)[0]?.[0] : undefined;
+  return firstFieldError ?? data?.message ?? fallback;
+};
 
 const isTimeoutError = (err: unknown) => {
   const axiosError = err as AxiosError | undefined;
@@ -54,6 +76,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
     children: [] as AdminChild[],
     rooms: [] as AdminRoom[],
     devices: [] as AdminDevice[],
+    trackerSightings: [] as TrackerSighting[],
     summary: {
       children_count: 0,
       rooms_count: 0,
@@ -175,7 +198,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         await this.loadChildren();
         return res.data;
       } catch (err) {
-        this.setError("Fehler beim Erstellen eines Kindes", err);
+        this.setError(extractApiMessage(err, "Fehler beim Erstellen eines Kindes"), err);
         return null;
       }
     },
@@ -224,7 +247,7 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         await api.patch(`/admin/children/${id}`, clean);
         await this.loadChildren();
       } catch (err) {
-        this.setError("Fehler beim Aktualisieren eines Kindes", err);
+        this.setError(extractApiMessage(err, "Fehler beim Aktualisieren eines Kindes"), err);
       }
     },
 
@@ -288,6 +311,30 @@ export const useAdminDataStore = defineStore("adminDataStore", {
         await this.loadDevices();
       } catch (err) {
         this.setError("Fehler beim Löschen eines Geräts", err);
+      }
+    },
+
+    async loadTrackerSightings() {
+      try {
+        const res = await api.get<TrackerSighting[]>("/admin/tracker-sightings", {
+          timeout: ADMIN_REQUEST_TIMEOUT_MS,
+        });
+        this.trackerSightings = res.data as TrackerSighting[];
+      } catch (err) {
+        // Poll-Fehler bewusst NICHT als harten Store-Error zeigen — sonst
+        // blinkt im Anlern-Modus bei jedem transienten Timeout eine Meldung.
+        console.warn("[AdminStore] tracker-sightings poll failed", err);
+      }
+    },
+
+    async dismissTrackerSighting(trackerUid: string) {
+      try {
+        await api.delete(`/admin/tracker-sightings/${encodeURIComponent(trackerUid)}`);
+        this.trackerSightings = this.trackerSightings.filter(
+          (sighting) => sighting.tracker_uid !== trackerUid,
+        );
+      } catch (err) {
+        this.setError("Sichtung konnte nicht verworfen werden", err);
       }
     },
 

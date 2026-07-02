@@ -12,18 +12,13 @@ const props = defineProps<{
 // größere quadratische Avatare in Tablet-/Modal-Listen.
 
 const candidates = computed<string[]>(() => {
-  const list: string[] = []
-  // 1) DB-photo_url hat hoechste Prioritaet (vom Admin via Upload gesetzt
-  //    → /storage/children/<id>.<ext>, oder externe URL).
-  if (props.child.photo_url) {
-    list.push(props.child.photo_url)
-  }
-  // 2) Convention-Fallback: manuell abgelegte Datei in branding/children/<id>.jpg.
-  //    Greift wenn photo_url leer ist ODER 404 zurueckkommt.
-  if (props.child.id != null) {
-    list.push(`/branding/children/${props.child.id}.jpg`)
-  }
-  return list
+  // Nur eine wirklich gesetzte photo_url wird angefragt (Admin-Upload →
+  // /storage/children/<id>.<ext> oder externe URL). Der frühere Convention-
+  // Fallback /branding/children/<id>.jpg ist raus: er löste pro Kind ohne
+  // hinterlegtes Foto einen 404 aus (Konsolen-Flut), weil die Datei praktisch
+  // nie existiert. Ohne photo_url gehen wir direkt auf den Initialen-
+  // Platzhalter — ganz ohne Netzwerk-Request.
+  return props.child.photo_url ? [props.child.photo_url] : []
 })
 
 const currentIndex = ref(0)

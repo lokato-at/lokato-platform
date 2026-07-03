@@ -12,19 +12,18 @@ export interface RoomIconOption {
 export const ROOM_ICONS_BASE = "/room-icons/";
 
 export const ROOM_ICONS: RoomIconOption[] = [
-  { file: "haus.svg", label: "Haus" },
-  { file: "obergeschoss.svg", label: "Obergeschoss" },
-  { file: "untergeschoss.svg", label: "Untergeschoss" },
-  { file: "garten.svg", label: "Garten" },
-  { file: "spielzimmer.svg", label: "Spielzimmer" },
-  { file: "buch.svg", label: "Leseecke" },
-  { file: "musik.svg", label: "Musik" },
-  { file: "essen.svg", label: "Speiseraum" },
-  { file: "stern.svg", label: "Stern" },
+  { file: "raumsymbol_01.svg", label: "Raumsymbol 1" },
+  { file: "raumsymbol_02.svg", label: "Raumsymbol 2" },
+  { file: "raumsymbol_03.svg", label: "Raumsymbol 3" },
+  { file: "raumsymbol_04.svg", label: "Raumsymbol 4" },
+  { file: "raumsymbol_05.svg", label: "Raumsymbol 5" },
+  { file: "raumsymbol_06.svg", label: "Raumsymbol 6" },
+  { file: "raumsymbol_07.svg", label: "Raumsymbol 7" },
+  { file: "raumsymbol_08.svg", label: "Raumsymbol 8" },
 ];
 
 /**
- * Baut die URL zum Raum-Bild. Akzeptiert reinen Dateinamen ("haus.svg") ebenso
+ * Baut die URL zum Raum-Bild. Akzeptiert reinen Dateinamen ("raumsymbol_01.svg") ebenso
  * wie einen bereits vollständigen Pfad/URL (z.B. selbst abgelegtes Bild).
  */
 export function roomIconUrl(icon?: string | null): string | null {

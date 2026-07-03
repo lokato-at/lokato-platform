@@ -20,6 +20,12 @@ const roomId = computed(() => {
 
 const room = computed(() => store.snapshot.room);
 const roomIconSrc = computed(() => roomIconUrl(room.value?.icon));
+// Faellt ein (evtl. veralteter) Icon-Wert auf 404, zeigen wir den Platzhalter
+// statt eines kaputten Bild-Symbols. Reset bei jedem Quellwechsel.
+const iconBroken = ref(false);
+watch(roomIconSrc, () => {
+  iconBroken.value = false;
+});
 const children = computed(() => store.snapshot.children ?? []);
 const currentCount = computed(() => store.snapshot.current_count ?? children.value.length);
 
@@ -215,7 +221,13 @@ function dismissAnimation() {
     </svg>
     <header class="tablet-header">
       <div class="room-info">
-        <img v-if="roomIconSrc" :src="roomIconSrc" class="room-icon-img" alt="" />
+        <img
+          v-if="roomIconSrc && !iconBroken"
+          :src="roomIconSrc"
+          class="room-icon-img"
+          alt=""
+          @error="iconBroken = true"
+        />
         <div v-else class="room-icon-placeholder"></div>
         <h2 class="room-title">{{ room?.name ?? "Room" }}</h2>
         <p class="meta">Aktuelle Belegung</p>
